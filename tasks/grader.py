@@ -42,6 +42,13 @@ def grade(episode_log: list[dict]) -> float:
     return round(max(0.0, min(1.0, raw_score)), 4)
 
 
+def grade_episode(total_reward: float, steps: int) -> float:
+    """Normalize a single episode's total reward into a [0.0, 1.0] score."""
+    if steps <= 0:
+        return 0.0
+    return round(max(0.0, min(1.0, total_reward / (steps * 10))), 4)
+
+
 def grade_summary(episode_log: list[dict]) -> dict:
     """Returns a detailed breakdown alongside the final score."""
     score = grade(episode_log)
