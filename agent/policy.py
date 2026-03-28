@@ -1,51 +1,43 @@
 """
-Baseline Policy: Assigns available sensors to the highest-priority untracked targets.
-Used for initial testing and as a performance baseline.
+Baseline Policy: Assigns available sensors to the highest-priority active targets.
+Compatible with Vishal's SentinelEnv Observation model (string IDs, active flag).
 """
+from env.models import Observation, Action
 
 
-def select_action(observation: dict) -> list[tuple[int, int]]:
+def select_action(obs: Observation) -> Action | None:
     """
     Greedy priority-based policy.
+    Assigns the first available sensor to the highest-priority active target.
 
     Args:
-        observation: dict with keys:
-            - "sensors": list of {"id": int, "available": bool}
-            - "targets": list of {"id": int, "priority": int, "tracked": bool}
+        obs: Observation object from SentinelEnv
 
     Returns:
-        List of (sensor_id, target_id) assignment pairs.
+        Action(sensor_id, target_id) or None if no valid assignment possible
     """
-    sensors = [s for s in observation.get("sensors", []) if s["available"]]
-    targets = sorted(
-        [t for t in observation.get("targets", []) if not t["tracked"]],
-        key=lambda t: t["priority"],
-        reverse=True,
-    )
+    available = [s for s in obs.sensors if s.available]
+    active = sorted([t for t in obs.targets if t.active], key=lambda t: -t.priority)
 
-    assignments = []
-    for sensor, target in zip(sensors, targets):
-        assignments.append((sensor["id"], target["id"]))
+    if not available or not active:
+        return None
 
-    return assignments
+    return Action(sensor_id=available[0].id, target_id=active[0].id)
 
 
-def random_action(observation: dict) -> list[tuple[int, int]]:
+def random_action(obs: Observation) -> Action | None:
     """
     Random policy for exploration baseline.
-    Randomly assigns available sensors to targets.
     """
     import random
 
-    sensors = [s for s in observation.get("sensors", []) if s["available"]]
-    targets = observation.get("targets", [])
+    available = [s for s in obs.sensors if s.available]
+    active = [t for t in obs.targets if t.active]
 
-    if not sensors or not targets:
-        return []
+    if not available or not active:
+        return None
 
-    random.shuffle(targets)
-    assignments = []
-    for sensor, target in zip(sensors, targets):
-        assignments.append((sensor["id"], target["id"]))
-
-    return assignments
+    return Action(
+        sensor_id=random.choice(available).id,
+        target_id=random.choice(active).id
+    )
