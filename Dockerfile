@@ -20,7 +20,7 @@ COPY . .
 EXPOSE 5000
 
 # Environment variables (override at runtime)
-ENV API_BASE_URL="https://api-inference.huggingface.co/v1" \
+ENV API_BASE_URL="https://router.huggingface.co/v1" \
     MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.3" \
     HF_TOKEN=""
 
