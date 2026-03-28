@@ -138,18 +138,20 @@ celerybeat.pid
 .env
 .envrc
 .venv
-env/
 venv/
-ENV/
+# ENV/ removed — on Windows this case-insensitively matched the project's env/ source folder
+.venv/
 env.bak/
 venv.bak/
+# Explicitly un-ignore the project source package
+!env/
 
 # Spyder project settings
 .spyderproject
 .spyproject
 
 # Rope project settings
-.ropeproject
+.
 
 # mkdocs documentation
 /site
