@@ -21,7 +21,7 @@ EXPOSE 5000
 
 # Environment variables (override at runtime)
 ENV API_BASE_URL="https://router.huggingface.co/v1" \
-    MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.3" \
+    MODEL_NAME="meta-llama/Meta-Llama-3-8B-Instruct" \
     HF_TOKEN=""
 
 # Run via gunicorn (production-grade)
