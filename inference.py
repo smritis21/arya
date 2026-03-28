@@ -5,7 +5,7 @@ from env import SentinelEnv
 from env.models import Action
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
+MODEL_NAME = os.environ.get("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
@@ -20,7 +20,9 @@ def build_prompt(obs) -> str:
         f"  - {t.id} | priority={t.priority} | active={t.active}"
         for t in obs.targets if t.active
     )
-    return f"""You are a sensor allocation agent. Assign ONE sensor to ONE target.
+    return f"""You are a sensor allocation agent. Assign ONE available sensor to the HIGHEST priority active target.
+Always pick priority 3 targets first, then priority 2, then priority 1.
+Never pick already-handled targets.
 
 Timestep: {obs.timestep}
 
@@ -30,7 +32,7 @@ Sensors:
 Active Targets (priority: 3=high, 2=medium, 1=low):
 {targets}
 
-Respond ONLY with valid JSON in this exact format:
+Respond ONLY with valid JSON, no explanation:
 {{"sensor_id": "<sensor_id>", "target_id": "<target_id>"}}
 """
 

@@ -96,7 +96,7 @@ docker build -t sentinel-env .
 docker run -p 5000:5000 \
   -e HF_TOKEN=your_token \
   -e MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3 \
-  -e API_BASE_URL=https://router.huggingface.co/v1 \
+  -e API_BASE_URL=https://router.huggingface.co/hf-inference/v1 \
   sentinel-env
 ```
 
@@ -112,7 +112,7 @@ python server.py
 ```bash
 export HF_TOKEN=your_token
 export MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
-export API_BASE_URL=https://router.huggingface.co/v1
+export API_BASE_URL=https://router.huggingface.co/hf-inference/v1
 python inference.py
 ```
 
