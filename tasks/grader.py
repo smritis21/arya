@@ -46,10 +46,10 @@ def grade_episode(total_reward: float, steps: int) -> float:
     """Normalize a single episode's total reward into a [0.0, 1.0] score."""
     if steps <= 0:
         return 0.0
-    # Best possible: +10 per step (hit p3, no misses)
-    # Worst possible: -12 per step (-2 idle penalty)
-    best = steps * 10.0
-    worst = steps * -12.0
+    # Best possible: +2 per step (hit p3, no misses)
+    # Worst possible: -2 per step (idle penalty)
+    best = steps * 2.0
+    worst = steps * -2.0
     normalized = (total_reward - worst) / (best - worst)
     return round(max(0.0, min(1.0, normalized)), 4)
 

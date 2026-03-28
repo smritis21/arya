@@ -54,10 +54,10 @@ Invalid or `null` actions incur an idle penalty of `-2.0`.
 
 | Condition | Reward |
 |---|---|
-| Assigned sensor to priority-3 target | `+10.0` |
-| Assigned sensor to priority-2 target | `+5.0` |
-| Assigned sensor to priority-1 target | `+2.0` |
-| Each unassigned priority-3 target | `-10.0` |
+| Assigned sensor to priority-3 target | `+2.0` |
+| Assigned sensor to priority-2 target | `+1.0` |
+| Assigned sensor to priority-1 target | `+0.5` |
+| Each unassigned priority-3 target | `-2.0` |
 | Invalid action or no action | `-2.0` |
 
 ---

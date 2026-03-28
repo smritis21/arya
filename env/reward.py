@@ -1,8 +1,8 @@
 from typing import List, Optional
 from env.models import Action, Target, Sensor
 
-PRIORITY_REWARD = {3: 10.0, 2: 5.0, 1: 2.0}
-MISSED_HIGH_PENALTY = -10.0
+PRIORITY_REWARD = {3: 2.0, 2: 1.0, 1: 0.5}
+MISSED_HIGH_PENALTY = -2.0
 IDLE_PENALTY = -2.0
 
 
