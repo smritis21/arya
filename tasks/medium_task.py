@@ -39,3 +39,8 @@ def update_target_positions(targets):
 
 def get_medium_task():
     return MEDIUM_TASK_CONFIG
+
+
+def get_medium_env():
+    from env import SentinelEnv
+    return SentinelEnv(max_steps=MEDIUM_TASK_CONFIG["max_steps"], seed=7)
