@@ -1,26 +1,14 @@
-# Use Python latest stable slim image for a small footprint
 FROM python:3.11-slim
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file first to leverage Docker build cache
 COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install system dependencies and Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir -r requirements.txt
-
-# Copy all project files into the container
 COPY . .
 
-# Expose port 5000 for the Flask application
-EXPOSE 5000
+ENV API_BASE_URL="https://router.huggingface.co/v1"
+ENV MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.1"
+ENV HF_TOKEN=""
 
-# Set default Flask environment variable
-ENV FLASK_APP=app.py
-
-# Run the Flask application
-CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["python", "inference.py"]

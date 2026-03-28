@@ -1,6 +1,64 @@
-FLASK_ENV: "production"
-SECRET_KEY: "super-secret-defense-key-change-in-prod"
-JWT_SECRET_KEY: "jwt-defense-secret-key-change-in-prod"
-DATABASE_URL: "sqlite:///defense_surveillance.db"
-MODEL_PATH: "/app/models/sensor_rl_model.pkl"
-API_KEYS: "mock_key_alpha,mock_key_bravo"
+name: SentinelRL
+version: "1.0.0"
+description: >
+  Adaptive sensor allocation environment for dynamic target monitoring.
+  An agent must assign limited sensors (satellites, drones, radars) to
+  high-priority targets under resource constraints and sensor failures.
+
+tasks:
+  - id: easy
+    description: Static targets, no sensor failures, 20 steps
+    module: tasks.easy_task
+    entry: get_easy_env
+  - id: medium
+    description: Dynamic targets, moderate failures, 40 steps
+    module: tasks.medium_task
+    entry: get_medium_env
+  - id: hard
+    description: High-risk zones, frequent failures, conflicting priorities, 60 steps
+    module: tasks.hard_task
+    entry: get_hard_env
+
+observation_space:
+  type: object
+  properties:
+    sensors:
+      type: array
+      items:
+        type: object
+        properties:
+          id:   { type: string }
+          type: { type: string, enum: [satellite, drone, radar] }
+          range: { type: number }
+          available: { type: boolean }
+    targets:
+      type: array
+      items:
+        type: object
+        properties:
+          id:       { type: string }
+          priority: { type: integer, minimum: 1, maximum: 3 }
+          active:   { type: boolean }
+    timestep: { type: integer }
+
+action_space:
+  type: object
+  properties:
+    sensor_id: { type: string }
+    target_id: { type: string }
+  required: [sensor_id, target_id]
+
+reward:
+  type: float
+  description: >
+    +10 for tracking priority-3 target, +5 for priority-2, +2 for priority-1.
+    -10 penalty per unassigned high-priority target. -2 idle penalty.
+
+episode:
+  max_steps: 60
+  termination: max_steps_reached or no_active_targets
+
+env:
+  API_BASE_URL: "https://router.huggingface.co/v1"
+  MODEL_NAME: "mistralai/Mistral-7B-Instruct-v0.1"
+  HF_TOKEN: ""
