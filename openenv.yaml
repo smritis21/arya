@@ -1,0 +1,6 @@
+FLASK_ENV: "production"
+SECRET_KEY: "super-secret-defense-key-change-in-prod"
+JWT_SECRET_KEY: "jwt-defense-secret-key-change-in-prod"
+DATABASE_URL: "sqlite:///defense_surveillance.db"
+MODEL_PATH: "/app/models/sensor_rl_model.pkl"
+API_KEYS: "mock_key_alpha,mock_key_bravo"
