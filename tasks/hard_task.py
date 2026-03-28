@@ -55,3 +55,8 @@ def update_target_positions(targets, high_risk_zones):
 
 def get_hard_task():
     return HARD_TASK_CONFIG
+
+
+def get_hard_env():
+    from env import SentinelEnv
+    return SentinelEnv(max_steps=HARD_TASK_CONFIG["max_steps"], seed=13)

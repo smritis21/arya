@@ -22,3 +22,8 @@ EASY_TASK_CONFIG = {
 
 def get_easy_task():
     return EASY_TASK_CONFIG
+
+
+def get_easy_env():
+    from env import SentinelEnv
+    return SentinelEnv(max_steps=EASY_TASK_CONFIG["max_steps"], seed=42)
