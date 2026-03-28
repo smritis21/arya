@@ -4,8 +4,8 @@ from openai import OpenAI
 from env import SentinelEnv
 from env.models import Action
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.1")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "mistralai/Mistral-7B-Instruct-v0.3")
 HF_TOKEN = os.environ.get("HF_TOKEN", "")
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
