@@ -1,97 +1,14 @@
-<<<<<<< HEAD
-# AI Sensor Allocation System for Defense Surveillance
-
-## 🛡️ Project Description
-The **AI Sensor Allocation System** is an advanced, reinforcement learning-based platform designed to optimally assign limited surveillance sensors (such as satellites, drones, and radars) to high-priority targets, including missile activity, border movements, and airspace intrusions. 
-
-By leveraging a custom Gym-style RL environment and real-time data streaming, the system maximizes threat coverage and minimizes blind spots to ensure maximum situational awareness.
-
-## ✨ Features
-- **Smart Sensor Allocation**: Uses Reinforcement Learning to dynamically allocate limited resources.
-- **Custom RL Environment**: Built with Gymnasium to simulate defense scenarios.
-- **Real-Time Dashboard**: React-based frontend for visualizing threat levels and sensor deployments.
-- **Secure Authentication**: JWT-based access control for API endpoints.
-- **REST API**: Fully-featured backend for manual sensor overrides and integrations.
-
-## 🛠️ Tech Stack
-- **Backend**: Python, Flask, Flask-RESTful
-- **Frontend**: React.js
-- **Machine Learning**: scikit-learn, Gymnasium (RL environment)
-- **Data Handling**: pandas, numpy
-- **Authentication**: JWT (JSON Web Tokens)
-- **Database**: SQLite (via SQLAlchemy)
-
----
-
-## 🚀 Installation & Setup
-
-### Option 1: Using Docker (Recommended)
-This is the fastest way to get the system running with all dependencies pre-configured.
-
-1. Build the Docker image:
-   ```bash
-   docker build -t ai-sensor-system .
-   ```
-2. Run the container:
-   ```bash
-   docker run -p 5000:5000 ai-sensor-system
-   ```
-3. The API will be available at `http://localhost:5000`.
-
-### Option 2: Local Setup (Development)
-
-1. Clone the repository and navigate into the project directory.
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   ```
-3. Install backend dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Set up the environment variables by editing `openenv.yaml` or creating a `.env` file.
-5. Initialize the SQLite database:
-   ```bash
-   flask db upgrade
-   ```
-6. Start the Flask Backend:
-   ```bash
-   flask run --port=5000
-   ```
-7. In a separate terminal, navigate to the frontend directory and start the React app:
-   ```bash
-   cd frontend
-   npm install
-   npm start
-   ```
-
----
-
-## 📡 Example API Endpoints
-
-| Endpoint | Method | Description | Auth Required |
-|----------|--------|-------------|---------------|
-| `/api/auth/login` | POST | Authenticate and retrieve JWT token. | No |
-| `/api/sensors/status` | GET | Retrieve the current status of all sensors. | Yes |
-| `/api/targets/active` | GET | List all currently tracked high-priority targets. | Yes |
-| `/api/allocation/optimize` | POST | Trigger the RL model to re-allocate sensors based on new threats. | Yes |
-| `/api/allocation/manual` | POST | Manually override an AI allocation decision. | Yes |
-
----
-
-## 🔮 Future Improvements
-- **Multi-Agent RL**: Transition from single-agent model to cooperative multi-agent reinforcement learning (MARL) for swarming drones.
-- **Live Satellite Feed Integration**: Consume mock/real satellite API data streams.
-- **PostgreSQL Migration**: Move from SQLite to PostgreSQL for production scalability.
-- **Mobile Application**: Extend the dashboard to a mobile app for field commanders.
-
----
-*Created as a final-year AI/ML capstone project / hackathon submission.*
-=======
 # SentinelEnv — AI Sensor Allocation Environment
 
-An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an agent must allocate limited surveillance sensors (satellites, drones, radars) to high-priority targets (missile activity, border movements, airspace intrusions) under real-time threat conditions.
+An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent must allocate limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
+
+---
+
+## What It Simulates
+
+A military command centre monitoring threats across a region has a fixed set of sensors deployed at various locations. At every timestep, new threats appear across the map. The agent must decide which sensor covers which threat before the window expires — threats that go unhandled disappear and are counted as missed.
+
+This directly models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real operational problem where limited sensor capacity must be allocated across many simultaneous threats in priority order.
 
 ---
 
@@ -102,7 +19,7 @@ Each `reset()` and `step()` returns an `Observation` object:
 | Field | Type | Description |
 |---|---|---|
 | `sensors` | `List[Sensor]` | All sensors and their current state |
-| `targets` | `List[Target]` | All active targets this timestep |
+| `targets` | `List[Target]` | Active threats this timestep |
 | `timestep` | `int` | Current step index (0-indexed) |
 
 **Sensor fields:**
@@ -126,10 +43,13 @@ Each `reset()` and `step()` returns an `Observation` object:
 
 ## Action Space
 
-Each `step()` accepts a single assignment:
+Each `step_batch()` accepts a list of assignments — one per available sensor:
 
 ```json
-{"sensor_id": "S1", "target_id": "T0_3"}
+[
+  {"sensor_id": "S1", "target_id": "T0_1"},
+  {"sensor_id": "S2", "target_id": "T0_3"}
+]
 ```
 
 | Field | Type | Description |
@@ -137,7 +57,7 @@ Each `step()` accepts a single assignment:
 | `sensor_id` | `str` | ID of an available sensor |
 | `target_id` | `str` | ID of an active target |
 
-Invalid or `null` actions incur an idle penalty of `-2.0`.
+Invalid or empty actions incur an idle penalty of `-2.0`.
 
 ---
 
@@ -148,20 +68,22 @@ Invalid or `null` actions incur an idle penalty of `-2.0`.
 | Assigned sensor to priority-3 target | `+2.0` |
 | Assigned sensor to priority-2 target | `+1.0` |
 | Assigned sensor to priority-1 target | `+0.5` |
-| Each unassigned priority-3 target | `-2.0` |
-| Invalid action or no action | `-2.0` |
+| Idle sensor that could have covered a HIGH threat | `-2.0` |
+| No assignments at all | `-2.0` |
+
+Targets that exceed sensor capacity are **not penalised** — only wasted sensors are. Unhandled threats expire at the end of each step and do not carry over.
 
 ---
 
 ## Tasks & Graders
 
-All graders return a normalized score in `[0.0, 1.0]`.
+All graders return a normalised score in `[0.0, 1.0]`.
 
-| Task | Sensors | Targets | Steps | Difficulty |
+| Task | Sensors | Steps | Seed | Difficulty |
 |---|---|---|---|---|
-| Easy | 2 | 3 static | 20 | Baseline allocation |
-| Medium | 3 | 5 dynamic | 40 | Moving targets, 5% sensor failure |
-| Hard | 4 | 8 dynamic | 60 | High-risk zones, 15% sensor failure |
+| Easy | 3–5 | 20 | 42 | Baseline allocation |
+| Medium | 3–5 | 40 | 7 | More steps, varied priorities |
+| Hard | 3–5 | 60 | 13 | Long horizon, high threat density |
 
 ---
 
@@ -169,12 +91,44 @@ All graders return a normalized score in `[0.0, 1.0]`.
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/status` | GET | Health check |
+| `/status` | GET | Health check + LLM connection status |
 | `/reset` | POST | Reset environment, returns initial observation |
 | `/state` | GET | Current observation without stepping |
-| `/step` | POST | Take action `{"sensor_id": "S1", "target_id": "T0_3"}` |
-| `/step/auto` | POST | Auto-step with greedy fallback policy |
-| `/grade` | POST | Run full episode and return normalized score |
+| `/step` | POST | Single action `{"sensor_id": "S1", "target_id": "T0_1"}` |
+| `/step/auto` | POST | LLM agent assigns all sensors (greedy fallback if no token) |
+| `/grade` | POST | Run full episode and return normalised score |
+| `/targets/custom` | POST | Register a custom threat `{"id","priority","lat","lon"}` |
+| `/ui` | GET | Interactive dashboard |
+
+---
+
+## Project Structure
+
+```
+├── env/
+│   ├── environment.py   # SentinelEnv — reset / step / step_batch / state
+│   ├── models.py        # Typed Pydantic models
+│   ├── dynamics.py      # Sensor init, target spawning
+│   └── reward.py        # Reward computation
+├── tasks/
+│   ├── easy_task.py
+│   ├── medium_task.py
+│   ├── hard_task.py
+│   └── grader.py        # grade_episode(), grade_summary()
+├── agent/
+│   └── policy.py        # Greedy + random baseline policies
+├── templates/
+│   └── dashboard.html   # Interactive Leaflet map dashboard
+├── static/
+│   ├── css/dashboard.css
+│   └── js/dashboard.js
+├── inference.py         # LLM agent loop — runs all 3 tasks, prints scores
+├── server.py            # Flask server exposing OpenEnv HTTP API + dashboard
+├── prevalidate.py       # Pre-submission validation script
+├── openenv.yaml         # Environment configuration
+├── Dockerfile
+└── requirements.txt
+```
 
 ---
 
@@ -186,8 +140,8 @@ All graders return a normalized score in `[0.0, 1.0]`.
 docker build -t sentinel-env .
 docker run -p 5000:5000 \
   -e HF_TOKEN=your_token \
-  -e MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3 \
-  -e API_BASE_URL=https://router.huggingface.co/hf-inference/v1 \
+  -e MODEL_NAME=meta-llama/Meta-Llama-3-8B-Instruct \
+  -e API_BASE_URL=https://router.huggingface.co/v1 \
   sentinel-env
 ```
 
@@ -195,15 +149,25 @@ docker run -p 5000:5000 \
 
 ```bash
 pip install -r requirements.txt
+
+# Windows (PowerShell)
+$env:HF_TOKEN="hf_xxxxxxxxxxxx"
+$env:MODEL_NAME="meta-llama/Meta-Llama-3-8B-Instruct"
+$env:API_BASE_URL="https://router.huggingface.co/v1"
+python server.py
+
+# Linux / macOS
+export HF_TOKEN=hf_xxxxxxxxxxxx
+export MODEL_NAME=meta-llama/Meta-Llama-3-8B-Instruct
+export API_BASE_URL=https://router.huggingface.co/v1
 python server.py
 ```
+
+Open `http://localhost:5000/ui` for the interactive dashboard.
 
 ### Run inference script
 
 ```bash
-export HF_TOKEN=your_token
-export MODEL_NAME=mistralai/Mistral-7B-Instruct-v0.3
-export API_BASE_URL=https://router.huggingface.co/hf-inference/v1
 python inference.py
 ```
 
@@ -225,30 +189,31 @@ python prevalidate.py
 
 ---
 
-## Project Structure
+## Baseline Scores
 
-```
-├── env/
-│   ├── environment.py   # SentinelEnv — reset/step/state
-│   ├── models.py        # Typed Pydantic models
-│   ├── dynamics.py      # Sensor init, target spawning
-│   └── reward.py        # Reward computation
-├── tasks/
-│   ├── easy_task.py
-│   ├── medium_task.py
-│   ├── hard_task.py
-│   └── grader.py        # grade(), grade_episode(), grade_summary()
-├── agent/
-│   └── policy.py        # Greedy + random baseline policies
-├── inference.py         # LLM agent loop with graded score output
-├── server.py            # Flask server exposing OpenEnv HTTP API
-├── prevalidate.py       # Pre-submission validation script
-├── openenv.yaml         # Environment configuration
-├── Dockerfile
-└── requirements.txt
-```
+Scores produced by `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
+
+| Task | Score |
+|---|---|
+| Easy (seed=42, 20 steps) | ~0.75 |
+| Medium (seed=7, 40 steps) | ~0.65 |
+| Hard (seed=13, 60 steps) | ~0.55 |
+
+Scores are reproducible — fixed seeds ensure identical threat sequences every run.
+
+---
+
+## Dashboard Features
+
+- Live Leaflet map with OpenStreetMap tiles
+- Draggable sensor markers with reverse geocoding (shows real place names)
+- Threat markers with priority-based colours and pulse animation for HIGH threats
+- Animated arcs showing sensor-to-threat assignments
+- Manual override — assign any sensor to any threat
+- Auto step — LLM agent makes all assignments, greedy fallback if token not set
+- Operation log showing `[LLM]` or `[greedy]` per step
+- Episode summary in plain English after each run
 
 ---
 
 *Built for the OpenEnv Hackathon — Round 1.*
->>>>>>> round1-submission
