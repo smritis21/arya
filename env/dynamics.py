@@ -19,7 +19,8 @@ def initialize_sensors(seed: int = 42) -> List[Sensor]:
 
 
 def spawn_targets(step: int, seed: int = 42) -> List[Target]:
-    rng = random.Random(seed + step)
+    # XOR with a large prime so step 0 and step 1 don't collide when seed differs by 1
+    rng = random.Random((seed * 6364136223846793005 + step) & 0xFFFFFFFFFFFFFFFF)
     targets = []
     for i in range(rng.randint(2, 4)):
         targets.append(Target(
@@ -31,5 +32,5 @@ def spawn_targets(step: int, seed: int = 42) -> List[Target]:
 
 
 def update_targets(targets: List[Target]) -> List[Target]:
-    # Keep only active targets
-    return [t for t in targets if t.active]
+    # Targets that weren't handled this step expire — no accumulation
+    return []
