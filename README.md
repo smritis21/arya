@@ -1,3 +1,12 @@
+---
+title: SentinelEnv
+emoji: 🛰️
+colorFrom: blue
+colorTo: red
+sdk: docker
+pinned: false
+---
+
 # SentinelEnv — AI Sensor Allocation Environment
 
 An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent must allocate limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
