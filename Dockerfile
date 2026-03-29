@@ -17,4 +17,4 @@ ENV API_BASE_URL="https://router.huggingface.co/v1" \
     MODEL_NAME="meta-llama/Meta-Llama-3-8B-Instruct" \
     HF_TOKEN=""
 
-CMD ["python", "server.py"]
+CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "1", "--timeout", "120", "server:app"]
