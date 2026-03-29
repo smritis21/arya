@@ -1,30 +1,7 @@
 """
 Grader: Evaluates agent performance across a task episode.
 Returns a normalized score between 0.0 and 1.0.
-Compatible with Vishal's SentinelEnv step info output.
 """
-
-
-def build_episode_log(env_steps: list[tuple]) -> list[dict]:
-    """
-    Converts SentinelEnv step outputs into grader-compatible episode log.
-
-    Args:
-        env_steps: list of (obs, reward, done, info) tuples from env.step()
-
-    Returns:
-        episode_log compatible with grade()
-    """
-    log = []
-    for obs, reward, done, info in env_steps:
-        log.append({
-            "targets": [
-                {"priority": t.priority, "tracked": not t.active}
-                for t in obs.targets
-            ],
-            "sensor_failures": 0  # SentinelEnv resets sensors each step
-        })
-    return log
 
 
 def grade(episode_log: list[dict]) -> float:
@@ -69,7 +46,12 @@ def grade_episode(total_reward: float, steps: int) -> float:
     """Normalize a single episode's total reward into a [0.0, 1.0] score."""
     if steps <= 0:
         return 0.0
-    return round(max(0.0, min(1.0, total_reward / (steps * 10))), 4)
+    # Best possible: +2 per step (hit p3, no misses)
+    # Worst possible: -2 per step (idle penalty)
+    best = steps * 2.0
+    worst = steps * -2.0
+    normalized = (total_reward - worst) / (best - worst)
+    return round(max(0.0, min(1.0, normalized)), 4)
 
 
 def grade_summary(episode_log: list[dict]) -> dict:

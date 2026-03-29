@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SentinelEnv — Defense Surveillance Dashboard</title>
+<link rel="stylesheet" href="/static/css/dashboard.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="logo">&#9728;</span>
+    <div>
+      <div class="topbar-title">SENTINEL<span>ENV</span></div>
+      <div class="topbar-sub">Defense Surveillance &amp; Sensor Allocation System</div>
+    </div>
+  </div>
+  <div class="topbar-center">
+    <div class="status-pill" id="statusPill">&#9679; STANDBY</div>
+    <div class="topbar-task" id="taskLabel">No task loaded</div>
+  </div>
+  <div class="topbar-right">
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="topbar-sub">IST</div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <aside class="left-panel">
+
+    <div class="panel-section">
+      <div class="section-title">MISSION SELECT</div>
+      <div class="task-list">
+        <button class="task-btn" id="btn-easy" onclick="loadTask(20,42,'Easy','LOW THREAT')">
+          <div class="task-indicator easy"></div>
+          <div class="task-info">
+            <div class="task-name">EASY</div>
+            <div class="task-meta">2 sensors &bull; 3 targets &bull; 20 steps</div>
+          </div>
+          <div class="task-threat easy-text">LOW</div>
+        </button>
+        <button class="task-btn" id="btn-medium" onclick="loadTask(40,7,'Medium','MODERATE THREAT')">
+          <div class="task-indicator medium"></div>
+          <div class="task-info">
+            <div class="task-name">MEDIUM</div>
+            <div class="task-meta">3 sensors &bull; 5 targets &bull; 40 steps</div>
+          </div>
+          <div class="task-threat medium-text">MOD</div>
+        </button>
+        <button class="task-btn" id="btn-hard" onclick="loadTask(60,13,'Hard','HIGH THREAT')">
+          <div class="task-indicator hard"></div>
+          <div class="task-info">
+            <div class="task-name">HARD</div>
+            <div class="task-meta">4 sensors &bull; 8 targets &bull; 60 steps</div>
+          </div>
+          <div class="task-threat hard-text">HIGH</div>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">SENSOR ARRAY</div>
+      <div id="sensorList" class="sensor-list">
+        <div class="empty-state">Load a mission to activate sensors</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">MANUAL OVERRIDE</div>
+      <select id="sensorSel" class="sel"><option>-- select sensor --</option></select>
+      <select id="targetSel" class="sel"><option>-- select target --</option></select>
+      <div class="btn-row">
+        <button class="btn btn-assign" onclick="manualStep()">&#9889; ASSIGN</button>
+        <button class="btn btn-auto" onclick="autoStep()">&#9654; AUTO</button>
+      </div>
+      <button class="btn btn-run" onclick="runAll()">&#9193; RUN FULL EPISODE</button>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">EPISODE GRADE</div>
+      <button class="btn btn-grade" onclick="runGrade()">&#9654; COMPUTE SCORE</button>
+      <div id="gradeBox" class="grade-box">
+        <div class="grade-val" id="gradeVal">--</div>
+        <div class="grade-sub" id="gradeSub">Run grader to evaluate</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- MAP AREA -->
+  <main class="map-area">
+    <div class="map-toolbar">
+      <button class="map-tool" id="tool-move" onclick="setTool('move')" title="Move sensors (drag)">&#9654; MOVE SENSOR</button>
+      <button class="map-tool" id="tool-threat-h" onclick="setTool('threat-h')" title="Place HIGH threat">&#9650; HIGH THREAT</button>
+      <button class="map-tool" id="tool-threat-m" onclick="setTool('threat-m')" title="Place MED threat">&#9654; MED THREAT</button>
+      <button class="map-tool" id="tool-threat-l" onclick="setTool('threat-l')" title="Place LOW threat">&#9679; LOW THREAT</button>
+      <span class="map-tool-hint" id="toolHint">Load a mission first</span>
+    </div>
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="map-legend">
+        <div class="legend-item"><span class="legend-dot sat"></span>Satellite</div>
+        <div class="legend-item"><span class="legend-dot drone"></span>Drone</div>
+        <div class="legend-item"><span class="legend-dot radar"></span>Radar</div>
+        <div class="legend-item"><span class="legend-dot threat-h"></span>HIGH Threat</div>
+        <div class="legend-item"><span class="legend-dot threat-m"></span>MED Threat</div>
+        <div class="legend-item"><span class="legend-dot threat-l"></span>LOW Threat</div>
+      </div>
+      <div class="map-overlay" id="mapOverlay">
+        <div class="overlay-icon">&#9728;</div>
+        <div class="overlay-text">SELECT A MISSION TO BEGIN</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+
+    <div class="panel-section">
+      <div class="section-title">EPISODE STATS</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-val" id="statStep">0</div>
+          <div class="stat-lbl">Step</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statReward">0</div>
+          <div class="stat-lbl">Reward</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statMissed">0</div>
+          <div class="stat-lbl">Missed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="statAssigned">0</div>
+          <div class="stat-lbl">Assigned</div>
+        </div>
+      </div>
+      <div class="score-label">SCORE</div>
+      <div class="score-track">
+        <div class="score-fill" id="scoreBar" style="width:0%"></div>
+      </div>
+      <div class="score-pct" id="scorePct">0.000</div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">ACTIVE THREATS</div>
+      <div id="threatList" class="threat-list">
+        <div class="empty-state">No active threats</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">OPERATION LOG</div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+
+  </aside>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/js/dashboard.js"></script>
+
+<!-- SUMMARY MODAL -->
+<div id="summaryModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:#1a1a1a;border:1px solid #395144;border-radius:8px;padding:28px 32px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <span style="color:#F0EBCE;font-family:'Courier New',monospace;font-size:1.1em;letter-spacing:2px;">EPISODE SUMMARY</span>
+      <button onclick="closeSummary()" style="background:none;border:none;color:#F0EBCE;font-size:1.4em;cursor:pointer;">&times;</button>
+    </div>
+    <pre id="summaryText" style="color:#c8d4b8;font-family:'Courier New',monospace;font-size:0.82em;white-space:pre-wrap;line-height:1.6;margin:0;"></pre>
+  </div>
+</div>
+</html>
