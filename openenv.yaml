@@ -1,9 +1,6 @@
-FLASK_ENV: "production"
-SECRET_KEY: "sentinel-defense-key-2025"
-JWT_SECRET_KEY: "sentinel-jwt-key-2025"
-DATABASE_URL: "sqlite:///defense_surveillance.db"
-MODEL_PATH: "/app/models/sensor_rl_model.pkl"
-API_KEYS: "mock_key_alpha,mock_key_bravo"
-API_BASE_URL: "https://router.huggingface.co/v1"
-MODEL_NAME: "meta-llama/Meta-Llama-3-8B-Instruct"
-HF_TOKEN: ""
+spec_version: 1
+name: sentinel-env
+type: space
+runtime: flask
+app: server:app
+port: 7860

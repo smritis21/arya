@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-env"
+version = "0.1.0"
+description = "SentinelEnv — AI Sensor Allocation Environment for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    "openenv-core>=0.2.0",
+    "flask>=3.0.2",
+    "flask-cors>=4.0.0",
+    "gunicorn>=21.2.0",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "requests>=2.31.0",
+    "pyyaml>=6.0.1",
+    "python-dotenv>=1.0.1",
+]
+
+[project.scripts]
+server = "server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["env", "tasks", "agent"]
