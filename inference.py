@@ -21,9 +21,9 @@ from tasks.hard_task import get_hard_env
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
-HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
+HF_TOKEN     = os.environ.get("HF_TOKEN")
 
-client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+client = None
 
 TASKS = [
     {"name": "Easy",   "env_fn": get_easy_env,   "seed": 42},
@@ -91,8 +91,20 @@ def greedy_actions(obs) -> list[Action]:
     return actions
 
 
+def parse_action(output: str, obs) -> Action | None:
+    """Wrapper around parse_llm_actions — returns first valid Action or None."""
+    actions = parse_llm_actions(output, obs)
+    return actions[0] if actions else None
+
+
+def fallback_action(obs) -> Action | None:
+    """Wrapper around greedy_actions — returns highest-priority Action or None."""
+    actions = greedy_actions(obs)
+    return actions[0] if actions else None
+
+
 def get_actions(obs) -> tuple[list[Action], str]:
-    if HF_TOKEN:
+    if HF_TOKEN and client is not None:
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
@@ -144,6 +156,7 @@ def run_task(name: str, env: SentinelEnv) -> float:
 
 
 if __name__ == "__main__":
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
     if not HF_TOKEN:
         print("[WARN] HF_TOKEN not set — running in greedy fallback mode.\n")
     else:
