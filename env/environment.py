@@ -1,11 +1,5 @@
 from typing import List, Optional, Tuple, Dict, Any, Union
 from env.models import Sensor, Target, Observation, Action
-<<<<<<< HEAD
-from env.dynamics import initialize_sensors, spawn_targets, update_targets
-from env.reward import compute_reward
-from pydantic import ValidationError
-
-=======
 from env.dynamics import initialize_sensors, spawn_targets
 from pydantic import ValidationError
 
@@ -13,7 +7,6 @@ PRIORITY_REWARD = {3: 2.0, 2: 1.0, 1: 0.5}
 MISSED_HIGH_PENALTY = -2.0
 IDLE_PENALTY = -2.0
 
->>>>>>> round1-submission
 
 class SentinelEnv:
     def __init__(self, max_steps: int = 10, seed: int = 42):
@@ -34,74 +27,20 @@ class SentinelEnv:
         return self.state()
 
     def state(self) -> Observation:
-<<<<<<< HEAD
-        return Observation(
-            sensors=self.sensors,
-            targets=self.targets,
-            timestep=self.current_step
-        )
-
-    def step(self, action: Union[Action, dict, None]) -> Tuple[Observation, float, bool, Dict[str, Any]]:
-        # --- FIXED: Accept dict or Action; convert and validate before processing ---
-        action = self._coerce_action(action)
-        # Validate Action object against current env state
-        valid_action = self._validate_action(action)
-
-        if valid_action:
-            # Mark sensor as busy and target as handled
-            for s in self.sensors:
-                if s.id == valid_action.sensor_id:
-                    s.available = False
-            for t in self.targets:
-                if t.id == valid_action.target_id:
-                    t.active = False
-            self._assignments.append({
-                "sensor": valid_action.sensor_id,
-                "target": valid_action.target_id
-            })
-
-        # Track missed high-priority targets
-        missed = [t.id for t in self.targets if t.active and t.priority == 3]
-        self._missed.extend(missed)
-
-        reward = compute_reward(valid_action, self.targets, self.sensors)
-
-        # Update environment state
-        self.targets = update_targets(self.targets)
-        self.current_step += 1
-
-        # Spawn new targets and reset sensor availability each step
-        new_targets = spawn_targets(step=self.current_step, seed=self.seed)
-        self.targets.extend(new_targets)
-        for s in self.sensors:
-            s.available = True  # sensors reset each step
-
-        done = self.current_step >= self.max_steps or not any(t.active for t in self.targets)
-=======
         return Observation(sensors=self.sensors, targets=self.targets, timestep=self.current_step)
 
     def step(self, action: Union[Action, dict, None]) -> Tuple[Observation, float, bool, Dict[str, Any]]:
-        """Single-action step — wraps step_batch for backward compatibility."""
         return self.step_batch([action] if action is not None else [])
 
     def step_batch(self, actions: List[Union[Action, dict, None]]) -> Tuple[Observation, float, bool, Dict[str, Any]]:
-        """
-        Process all sensor assignments for one timestep at once.
-        - Each action assigns one sensor to one target.
-        - Reward computed once across all assignments.
-        - Timestep advances exactly once.
-        - Targets that weren't handled this step expire (no accumulation).
-        """
         coerced = [self._coerce_action(a) for a in actions]
-        valid_actions = [self._validate_action(a) for a in coerced]
-        valid_actions = [a for a in valid_actions if a is not None]
+        valid_actions = [a for a in (self._validate_action(a) for a in coerced) if a is not None]
 
-        # Apply assignments — mark sensors busy and targets handled
         handled_ids = set()
         used_sensor_ids = set()
         for action in valid_actions:
             if action.sensor_id in used_sensor_ids or action.target_id in handled_ids:
-                continue  # skip duplicate sensor/target in same batch
+                continue
             for s in self.sensors:
                 if s.id == action.sensor_id:
                     s.available = False
@@ -112,92 +51,40 @@ class SentinelEnv:
             used_sensor_ids.add(action.sensor_id)
             self._assignments.append({"sensor": action.sensor_id, "target": action.target_id})
 
-        # Compute reward for this timestep
         if not handled_ids:
             reward = IDLE_PENALTY
         else:
-            reward = 0.0
-            # Reward for each handled target
-            for t in self.targets:
-                if t.id in handled_ids:
-                    reward += PRIORITY_REWARD.get(t.priority, 0.0)
-
-            # Penalty only for HIGH threats that were skipped despite sensors being available
-            # i.e. sensors were assigned to lower-priority targets while HIGH ones were ignored
-            handled_priorities = [t.priority for t in self.targets if t.id in handled_ids]
+            reward = sum(PRIORITY_REWARD.get(t.priority, 0.0) for t in self.targets if t.id in handled_ids)
             unhandled_high = [t for t in self.targets if t.active and t.priority == 3]
-            sensors_used = len(handled_ids)
-            total_sensors = len([s for s in self.sensors])
-            # How many sensors were left idle (not assigned to anything)
-            idle_sensors = total_sensors - sensors_used
-            # Penalize only for unhandled HIGH threats that idle sensors could have covered
-            avoidable_misses = min(len(unhandled_high), idle_sensors)
-            reward += avoidable_misses * MISSED_HIGH_PENALTY
+            idle_sensors = len(self.sensors) - len(handled_ids)
+            reward += min(len(unhandled_high), idle_sensors) * MISSED_HIGH_PENALTY
 
-        # Track truly missed HIGH threats — those that expired unhandled
-        missed_this_step = [
-            t.id for t in self.targets
-            if t.active and t.priority == 3 and t.id not in handled_ids
-        ]
-        self._missed.extend(missed_this_step)
+        self._missed.extend(t.id for t in self.targets if t.active and t.priority == 3 and t.id not in handled_ids)
 
-        # Advance timestep — all remaining active targets expire
         self.current_step += 1
-        new_targets = spawn_targets(step=self.current_step, seed=self.seed)
-        self.targets = new_targets  # fresh targets only, no carryover
+        self.targets = spawn_targets(step=self.current_step, seed=self.seed)
         for s in self.sensors:
             s.available = True
 
         done = self.current_step >= self.max_steps
->>>>>>> round1-submission
-
-        info = {
-            "assignments": list(self._assignments),
-            "missed_targets": list(self._missed),
-            "step_count": self.current_step
-        }
-<<<<<<< HEAD
-
-        return self.state(), reward, done, info
-
-    def _coerce_action(self, action: Union[Action, dict, None]) -> Optional[Action]:
-        """Convert dict → Action model. Returns None on failure."""
-=======
+        info = {"assignments": list(self._assignments), "missed_targets": list(self._missed), "step_count": self.current_step}
         return self.state(), reward, done, info
 
     def _coerce_action(self, action) -> Optional[Action]:
->>>>>>> round1-submission
         if action is None:
             return None
         if isinstance(action, Action):
             return action
-<<<<<<< HEAD
-        # --- FIXED: dict input converted to typed Action model here ---
-=======
->>>>>>> round1-submission
         if isinstance(action, dict):
             try:
                 return Action(**action)
             except (ValidationError, TypeError):
-<<<<<<< HEAD
-                # Invalid dict shape — treat as no-op with penalty
-                return None
-        # Unexpected type — discard safely
-        return None
-
-    def _validate_action(self, action: Optional[Action]) -> Optional[Action]:
-        """Validate a typed Action against live env state. Never accepts raw dict."""
-        if action is None:
-            return None
-        # action is guaranteed to be an Action instance at this point
-=======
                 return None
         return None
 
     def _validate_action(self, action: Optional[Action]) -> Optional[Action]:
         if action is None:
             return None
->>>>>>> round1-submission
         sensor_ids = {s.id for s in self.sensors if s.available}
         target_ids = {t.id for t in self.targets if t.active}
         if action.sensor_id in sensor_ids and action.target_id in target_ids:
