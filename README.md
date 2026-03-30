@@ -9,15 +9,15 @@ pinned: false
 
 # SentinelEnv — AI Sensor Allocation Environment
 
-An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent must allocate limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
+An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent allocates limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
 
 ---
 
 ## What It Simulates
 
-A military command centre monitoring threats across a region has a fixed set of sensors deployed at various locations. At every timestep, new threats appear across the map. The agent must decide which sensor covers which threat before the window expires — threats that go unhandled disappear and are counted as missed.
+A military command centre monitors threats across a region with a fixed set of sensors. At every timestep, new threats appear on the map. The agent decides which sensor covers which threat before the window expires — unhandled threats disappear and count as missed.
 
-This directly models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real operational problem where limited sensor capacity must be allocated across many simultaneous threats in priority order.
+This models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real operational problem where limited sensor capacity must be allocated across simultaneous threats in priority order.
 
 ---
 
@@ -61,11 +61,6 @@ Each `step_batch()` accepts a list of assignments — one per available sensor:
 ]
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `sensor_id` | `str` | ID of an available sensor |
-| `target_id` | `str` | ID of an active target |
-
 Invalid or empty actions incur an idle penalty of `-2.0`.
 
 ---
@@ -80,7 +75,7 @@ Invalid or empty actions incur an idle penalty of `-2.0`.
 | Idle sensor that could have covered a HIGH threat | `-2.0` |
 | No assignments at all | `-2.0` |
 
-Targets that exceed sensor capacity are **not penalised** — only wasted sensors are. Unhandled threats expire at the end of each step and do not carry over.
+Targets that exceed sensor capacity are **not penalised** — only wasted sensors are. Unhandled threats expire at end of step and don't carry over.
 
 ---
 
@@ -100,6 +95,7 @@ All graders return a normalised score in `[0.0, 1.0]`.
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/` | GET | Interactive dashboard |
 | `/status` | GET | Health check + LLM connection status |
 | `/reset` | POST | Reset environment, returns initial observation |
 | `/state` | GET | Current observation without stepping |
@@ -107,7 +103,6 @@ All graders return a normalised score in `[0.0, 1.0]`.
 | `/step/auto` | POST | LLM agent assigns all sensors (greedy fallback if no token) |
 | `/grade` | POST | Run full episode and return normalised score |
 | `/targets/custom` | POST | Register a custom threat `{"id","priority","lat","lon"}` |
-| `/ui` | GET | Interactive dashboard |
 
 ---
 
@@ -116,25 +111,27 @@ All graders return a normalised score in `[0.0, 1.0]`.
 ```
 ├── env/
 │   ├── environment.py   # SentinelEnv — reset / step / step_batch / state
-│   ├── models.py        # Typed Pydantic models
+│   ├── models.py        # Pydantic models
 │   ├── dynamics.py      # Sensor init, target spawning
 │   └── reward.py        # Reward computation
 ├── tasks/
 │   ├── easy_task.py
 │   ├── medium_task.py
 │   ├── hard_task.py
-│   └── grader.py        # grade_episode(), grade_summary()
+│   └── grader.py
 ├── agent/
 │   └── policy.py        # Greedy + random baseline policies
+├── server/
+│   └── app.py           # Entry point for OpenEnv multi-mode deployment
 ├── templates/
-│   └── dashboard.html   # Interactive Leaflet map dashboard
+│   └── dashboard.html
 ├── static/
 │   ├── css/dashboard.css
 │   └── js/dashboard.js
-├── inference.py         # LLM agent loop — runs all 3 tasks, prints scores
-├── server.py            # Flask server exposing OpenEnv HTTP API + dashboard
-├── prevalidate.py       # Pre-submission validation script
-├── openenv.yaml         # Environment configuration
+├── inference.py         # Runs all 3 tasks, prints scores
+├── server.py            # Flask server — API + dashboard
+├── openenv.yaml         # OpenEnv config
+├── pyproject.toml
 ├── Dockerfile
 └── requirements.txt
 ```
@@ -143,16 +140,18 @@ All graders return a normalised score in `[0.0, 1.0]`.
 
 ## Setup
 
-### Docker (recommended)
+### Docker
 
 ```bash
 docker build -t sentinel-env .
-docker run -p 5000:5000 \
+docker run -p 7860:7860 \
   -e HF_TOKEN=your_token \
   -e MODEL_NAME=meta-llama/Meta-Llama-3-8B-Instruct \
   -e API_BASE_URL=https://router.huggingface.co/v1 \
   sentinel-env
 ```
+
+Open `http://localhost:7860` for the dashboard.
 
 ### Local
 
@@ -172,18 +171,10 @@ export API_BASE_URL=https://router.huggingface.co/v1
 python server.py
 ```
 
-Open `http://localhost:5000/ui` for the interactive dashboard.
-
-### Run inference script
+### Run inference
 
 ```bash
 python inference.py
-```
-
-### Pre-submission validation
-
-```bash
-python prevalidate.py
 ```
 
 ---
@@ -200,7 +191,7 @@ python prevalidate.py
 
 ## Baseline Scores
 
-Scores produced by `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
+Scores from `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
 
 | Task | Score |
 |---|---|
@@ -208,20 +199,19 @@ Scores produced by `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
 | Medium (seed=7, 40 steps) | ~0.65 |
 | Hard (seed=13, 60 steps) | ~0.55 |
 
-Scores are reproducible — fixed seeds ensure identical threat sequences every run.
+Fixed seeds ensure identical threat sequences every run.
 
 ---
 
-## Dashboard Features
+## Dashboard
 
-- Live Leaflet map with OpenStreetMap tiles
-- Draggable sensor markers with reverse geocoding (shows real place names)
-- Threat markers with priority-based colours and pulse animation for HIGH threats
+- Live Leaflet map with sensor and threat markers
+- Priority-based colours with pulse animation for HIGH threats
 - Animated arcs showing sensor-to-threat assignments
 - Manual override — assign any sensor to any threat
-- Auto step — LLM agent makes all assignments, greedy fallback if token not set
+- Auto step — LLM agent or greedy fallback
 - Operation log showing `[LLM]` or `[greedy]` per step
-- Episode summary in plain English after each run
+- Episode summary after each run
 
 ---
 
