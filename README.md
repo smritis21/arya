@@ -7,9 +7,11 @@ sdk: docker
 pinned: false
 ---
 
-# SentinelEnv — AI Sensor Allocation Environment
+# Arya RL Monitoring System — Sensor Allocation Environment
 
 An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent allocates limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
+
+This environment implements the required OpenEnv interface: reset(), step(), and state().
 
 ---
 
@@ -22,6 +24,8 @@ This models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real o
 ---
 
 ## Observation Space
+
+Each step() call returns (observation, reward, done, info) following OpenEnv specification.
 
 Each `reset()` and `step()` returns an `Observation` object:
 
