@@ -227,10 +227,12 @@ def grade():
                     "steps": info["step_count"], "seed": seed})
 
 
+@app.get("/")
 @app.get("/ui")
 def ui():
     return render_template("dashboard.html")
 
 
 if __name__ == "__main__":
-    app.run(port=5000, debug=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 7860))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
