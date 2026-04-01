@@ -9,6 +9,13 @@ pinned: false
 
 # Arya RL Monitoring System — Sensor Allocation Environment
 
+## Live Demo
+
+- 🔗 Live App: https://sm21s-sentinel-env.hf.space/
+- 📦 Hugging Face Repo: https://huggingface.co/spaces/sm21s/sentinel-env
+
+---
+
 An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent allocates limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
 
 This environment implements the required OpenEnv interface: reset(), step(), and state().
@@ -20,6 +27,12 @@ This environment implements the required OpenEnv interface: reset(), step(), and
 A military command centre monitors threats across a region with a fixed set of sensors. At every timestep, new threats appear on the map. The agent decides which sensor covers which threat before the window expires — unhandled threats disappear and count as missed.
 
 This models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real operational problem where limited sensor capacity must be allocated across simultaneous threats in priority order.
+
+**Environment behaviour:**
+- Sensors have per-step availability constraints — a sensor may be unavailable due to failure probability or prior assignment
+- Targets spawn dynamically each timestep based on seeded random generation
+- Assignments are time-constrained — each action must be submitted within the current step window
+- Unhandled targets expire at end of step and do not carry over to the next
 
 ---
 
@@ -85,13 +98,15 @@ Targets that exceed sensor capacity are **not penalised** — only wasted sensor
 
 ## Tasks & Graders
 
-All graders return a normalised score in `[0.0, 1.0]`.
+All graders return a normalised score in `[0.0, 1.0]`. Difficulty increases with environment complexity and time horizon.
 
-| Task | Sensors | Steps | Seed | Difficulty |
-|---|---|---|---|---|
-| Easy | 3–5 | 20 | 42 | Baseline allocation |
-| Medium | 3–5 | 40 | 7 | More steps, varied priorities |
-| Hard | 3–5 | 60 | 13 | Long horizon, high threat density |
+| Task | Sensors | Targets/Step | Steps | Seed | Sensor Failure Prob | Difficulty |
+|---|---|---|---|---|---|---|
+| Easy | 3–5 | 2–3 | 20 | 42 | Low | Baseline allocation |
+| Medium | 3–5 | 3–4 | 40 | 7 | Medium | More steps, varied priorities |
+| Hard | 3–5 | 4–6 | 60 | 13 | Higher | Long horizon, high threat density |
+
+Each task uses a fixed seed to ensure deterministic, reproducible threat sequences across runs. The grader runs a full episode and returns a score normalised against the maximum achievable reward for that configuration.
 
 ---
 
@@ -114,30 +129,35 @@ All graders return a normalised score in `[0.0, 1.0]`.
 
 ```
 ├── env/
-│   ├── environment.py   # SentinelEnv — reset / step / step_batch / state
-│   ├── models.py        # Pydantic models
-│   ├── dynamics.py      # Sensor init, target spawning
-│   └── reward.py        # Reward computation
+│   ├── environment.py   # OpenEnv environment (reset / step / state)
+│   ├── models.py        # Pydantic models (Sensor, Target, Observation)
+│   ├── dynamics.py      # Sensor initialization and target spawning
+│   └── reward.py        # Deprecated (logic handled in environment.py)
 ├── tasks/
 │   ├── easy_task.py
 │   ├── medium_task.py
 │   ├── hard_task.py
-│   └── grader.py
-├── agent/
-│   └── policy.py        # Greedy + random baseline policies
+│   └── grader.py        # grade_episode() returns score [0.0–1.0]
 ├── server/
-│   └── app.py           # Entry point for OpenEnv multi-mode deployment
+│   └── app.py           # Optional entry point (not used in Docker)
 ├── templates/
-│   └── dashboard.html
+│   └── dashboard.html   # UI layout
 ├── static/
-│   ├── css/dashboard.css
-│   └── js/dashboard.js
-├── inference.py         # Runs all 3 tasks, prints scores
-├── server.py            # Flask server — API + dashboard
-├── openenv.yaml         # OpenEnv config
+│   ├── css/
+│   │   └── dashboard.css
+│   └── js/
+│       └── dashboard.js
+├── inference.py         # Baseline inference script (OpenAI client)
+├── server.py            # Main Flask server (API + UI)
+├── openenv.yaml         # OpenEnv specification config
+├── Dockerfile           # HF Spaces container setup
+├── requirements.txt     # Python dependencies
+├── uv.lock              # Locked dependencies (reproducibility)
 ├── pyproject.toml
-├── Dockerfile
-└── requirements.txt
+├── body.json            # Sample request payload (optional)
+├── .gitignore
+├── .gitattributes
+└── README.md
 ```
 
 ---
@@ -193,17 +213,23 @@ python inference.py
 
 ---
 
-## Baseline Scores
+## Inference & LLM Agent
 
-Scores from `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
+`inference.py` runs all three tasks sequentially and prints normalised scores.
+
+- Uses the **OpenAI client** (`openai.OpenAI`) pointed at `API_BASE_URL` with `HF_TOKEN` for authentication
+- The LLM receives the current observation (sensors + targets) and returns a JSON assignment list
+- If no token is set or the LLM call fails, a **greedy fallback agent** assigns available sensors to highest-priority targets
+- All runs use fixed seeds — deterministic environment behaviour ensures reproducible scores across runs
+- Error handling covers malformed LLM responses, missing fields, and invalid assignments
+
+**Baseline Scores** from `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
 
 | Task | Score |
 |---|---|
 | Easy (seed=42, 20 steps) | ~0.75 |
 | Medium (seed=7, 40 steps) | ~0.65 |
 | Hard (seed=13, 60 steps) | ~0.55 |
-
-Fixed seeds ensure identical threat sequences every run.
 
 ---
 
