@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir flask flask-cors gunicorn openai pydantic requests pyyaml python-dotenv
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

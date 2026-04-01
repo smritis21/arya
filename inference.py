@@ -133,7 +133,8 @@ def run_task(name: str, env: SentinelEnv) -> float:
     llm_steps    = 0
     greedy_steps = 0
 
-    print(f"  [RESET] Sensors={len(obs.sensors)} | Targets={len(obs.targets)}")
+    print("[START]")
+    print(f"Sensors={len(obs.sensors)} | Targets={len(obs.targets)}")
 
     while not done:
         actions, source = get_actions(obs)
@@ -144,9 +145,9 @@ def run_task(name: str, env: SentinelEnv) -> float:
         else:
             greedy_steps += 1
         assignments_str = ", ".join(f"{a.sensor_id}→{a.target_id}" for a in actions) if actions else "none"
-        print(f"  [STEP {info['step_count']:>2}] [{source.upper():>6}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
+        print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
 
-    score = grade_episode(total_reward, info["step_count"])
+    score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
     print(f"\n  Total Reward : {total_reward:.1f}")
     print(f"  Steps        : {info['step_count']}")
     print(f"  LLM steps    : {llm_steps}  |  Greedy fallback: {greedy_steps}")
@@ -156,11 +157,12 @@ def run_task(name: str, env: SentinelEnv) -> float:
 
 
 if __name__ == "__main__":
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-    if not HF_TOKEN:
-        print("[WARN] HF_TOKEN not set — running in greedy fallback mode.\n")
-    else:
+    if HF_TOKEN:
+        client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
         print(f"[LLM] Using model: {MODEL_NAME}\n")
+    else:
+        client = None
+        print("[WARN] HF_TOKEN not set — running in greedy fallback mode.\n")
 
     results = {}
     for task in TASKS:
@@ -177,3 +179,4 @@ if __name__ == "__main__":
         print(f"  {name:<8} {score:.4f}  {bar}")
     print(f"\n  Average: {sum(results.values()) / len(results):.4f}")
     print(f"{'='*50}")
+    print("[END]")

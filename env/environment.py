@@ -1,3 +1,4 @@
+import random
 from typing import List, Optional, Tuple, Dict, Any, Union
 from env.models import Sensor, Target, Observation, Action
 from env.dynamics import initialize_sensors, spawn_targets
@@ -9,21 +10,38 @@ IDLE_PENALTY = -2.0
 
 
 class SentinelEnv:
-    def __init__(self, max_steps: int = 10, seed: int = 42):
+    def __init__(self, max_steps: int = 10, seed: int = 42, config: Optional[Dict] = None):
         self.max_steps = max_steps
         self.seed = seed
+        self.config = config
         self.sensors: List[Sensor] = []
         self.targets: List[Target] = []
         self.current_step: int = 0
         self._assignments: List[Dict] = []
         self._missed: List[str] = []
+        self.initial_sensor_count: int = 0
+        self._sensor_failure_prob: float = float(config.get("sensor_failure_prob", 0.0)) if config else 0.0
 
     def reset(self) -> Observation:
-        self.sensors = initialize_sensors(self.seed)
-        self.targets = spawn_targets(step=0, seed=self.seed)
+        if self.config and "sensors" in self.config:
+            self.sensors = [
+                Sensor(id=f"S{s['id']+1}", type=s.get("type", "radar"),
+                       range=float(s.get("range", 200)), available=s.get("available", True))
+                for s in self.config["sensors"]
+            ]
+        else:
+            self.sensors = initialize_sensors(self.seed)
+        if self.config and "targets" in self.config:
+            self.targets = [
+                Target(id=f"T0_{t['id']+1}", priority=min(t["priority"], 3), active=True)
+                for t in self.config["targets"]
+            ]
+        else:
+            self.targets = spawn_targets(step=0, seed=self.seed)
         self.current_step = 0
         self._assignments = []
         self._missed = []
+        self.initial_sensor_count = len(self.sensors)
         return self.state()
 
     def state(self) -> Observation:
@@ -62,9 +80,19 @@ class SentinelEnv:
         self._missed.extend(t.id for t in self.targets if t.active and t.priority == 3 and t.id not in handled_ids)
 
         self.current_step += 1
-        self.targets = spawn_targets(step=self.current_step, seed=self.seed)
+        if self.config and "targets" in self.config:
+            self.targets = [
+                Target(id=f"T{self.current_step}_{t['id']+1}", priority=min(t["priority"], 3), active=True)
+                for t in self.config["targets"]
+            ]
+        else:
+            self.targets = spawn_targets(step=self.current_step, seed=self.seed)
         for s in self.sensors:
             s.available = True
+        if self._sensor_failure_prob > 0.0:
+            for s in self.sensors:
+                if random.random() < self._sensor_failure_prob:
+                    s.available = False
 
         done = self.current_step >= self.max_steps
         info = {"assignments": list(self._assignments), "missed_targets": list(self._missed), "step_count": self.current_step}

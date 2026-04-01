@@ -1,9 +1,19 @@
 spec_version: 1
 name: sentinel-env
-type: space
-runtime: flask
-app: server:app
-port: 7860
-API_BASE_URL: "https://router.huggingface.co/v1"
-MODEL_NAME: "meta-llama/Meta-Llama-3-8B-Instruct"
-HF_TOKEN: ""
+type: environment
+
+runtime:
+  type: docker
+  entrypoint: server:app
+  port: 7860
+
+environment:
+  endpoints:
+    reset: /reset
+    step: /step
+    state: /state
+
+env_vars:
+  API_BASE_URL: "https://router.huggingface.co/v1"
+  MODEL_NAME: "meta-llama/Meta-Llama-3-8B-Instruct"
+  HF_TOKEN: ""

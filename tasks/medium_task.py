@@ -6,13 +6,13 @@ Requires better decision-making as targets move each step.
 import random
 
 MEDIUM_TASK_CONFIG = {
-    "num_sensors": 3,
+    "num_sensors": 4,
     "num_targets": 5,
     "max_steps": 40,
     "sensor_failure_prob": 0.05,
     "targets": [
-        {"id": 0, "priority": 5, "position": (1, 1), "dynamic": True, "risk": 0.1},
-        {"id": 1, "priority": 4, "position": (3, 7), "dynamic": True, "risk": 0.1},
+        {"id": 0, "priority": 3, "position": (1, 1), "dynamic": True, "risk": 0.1},
+        {"id": 1, "priority": 3, "position": (3, 7), "dynamic": True, "risk": 0.1},
         {"id": 2, "priority": 3, "position": (6, 4), "dynamic": True, "risk": 0.2},
         {"id": 3, "priority": 2, "position": (9, 9), "dynamic": False, "risk": 0.1},
         {"id": 4, "priority": 1, "position": (0, 5), "dynamic": False, "risk": 0.0},
@@ -21,6 +21,7 @@ MEDIUM_TASK_CONFIG = {
         {"id": 0, "range": 8, "available": True},
         {"id": 1, "range": 6, "available": True},
         {"id": 2, "range": 7, "available": True},
+        {"id": 3, "range": 9, "available": True},
     ],
 }
 
@@ -43,4 +44,4 @@ def get_medium_task():
 
 def get_medium_env():
     from env import SentinelEnv
-    return SentinelEnv(max_steps=MEDIUM_TASK_CONFIG["max_steps"], seed=7)
+    return SentinelEnv(max_steps=MEDIUM_TASK_CONFIG["max_steps"], seed=7, config=MEDIUM_TASK_CONFIG)
