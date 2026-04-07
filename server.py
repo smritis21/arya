@@ -223,6 +223,7 @@ def grade():
         g_obs, reward, done, info = g_env.step_batch(actions)
         total_reward += reward
     score = grade_episode(total_reward, info["step_count"], num_sensors=g_env.initial_sensor_count)
+    score = max(0.01, min(0.99, score))
     return jsonify({"score": score, "total_reward": total_reward,
                     "steps": info["step_count"], "seed": seed})
 

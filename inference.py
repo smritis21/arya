@@ -148,6 +148,7 @@ def run_task(name: str, env: SentinelEnv) -> float:
         print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
 
     score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
+    score = max(0.01, min(0.99, score))
     print(f"\n  Total Reward : {total_reward:.1f}")
     print(f"  Steps        : {info['step_count']}")
     print(f"  LLM steps    : {llm_steps}  |  Greedy fallback: {greedy_steps}")
