@@ -12,4 +12,4 @@ def grade_episode(total_reward: float, steps: int, num_sensors: int = 5) -> floa
     best = steps * max_reward_per_step
     worst = steps * -2.0
     normalized = (total_reward - worst) / (best - worst)
-    return round(max(0.0, min(1.0, normalized)), 4)
+    return round(max(0.0001, min(0.9999, normalized)), 4)
