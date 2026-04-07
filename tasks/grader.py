@@ -7,7 +7,7 @@ Returns a normalized score between 0.0 and 1.0.
 def grade_episode(total_reward: float, steps: int, num_sensors: int = 5) -> float:
     """Normalize a single episode's total reward into a [0.0, 1.0] score."""
     if steps <= 0:
-        return 0.0
+        return 0.0001
     max_reward_per_step = num_sensors * 2.0
     best = steps * max_reward_per_step
     worst = steps * -2.0
