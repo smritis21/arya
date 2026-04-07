@@ -12,6 +12,8 @@ environment:
     reset: /reset
     step: /step
     state: /state
+    grade: /grade
+
 
 env_vars:
   API_BASE_URL: "https://router.huggingface.co/v1"
