@@ -10,12 +10,7 @@ def grade_episode(total_reward: float, steps: int, num_sensors: int = 5) -> floa
         return 0.5
 
     max_reward = steps * num_sensors * 2.0
-<<<<<<< HEAD
     min_reward = steps * -2.0
-=======
-    min_reward = steps * num_sensors * -2.0
-
->>>>>>> 2fc3fc6 (feat: implement episode grader and update inference scoring logic to enforce normalized bounds)
     if max_reward == min_reward:
         raw_score = 0.5
     else:

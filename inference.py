@@ -123,7 +123,7 @@ def get_actions(obs) -> tuple[list[Action], str]:
 
 
 def log_end(task: str, score: float, steps: int) -> None:
-    # Clamp INSIDE log_end — score is always strictly within (0, 1) when printed
+    # Clamp INSIDE log_end — score is always strictly within (0.01, 0.99) when printed
     safe_score = min(max(float(score), 0.01), 0.99)
     print(f"[END] task={task} score={safe_score:.2f} steps={steps}", flush=True)
 
@@ -152,11 +152,18 @@ def run_task(name: str, env: SentinelEnv) -> float:
             llm_steps += 1
         else:
             greedy_steps += 1
-        assignments_str = ", ".join(f"{a.sensor_id}→{a.target_id}" for a in actions) if actions else "none"
-        print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}", flush=True)
+        assignments_str = ", ".join(f"{a.sensor_id}->{a.target_id}" for a in actions) if actions else "none"
+
+        # ✅ FIXED: matches required format exactly
+        # [STEP] step=<n> action=<str> reward=<0.00> done=<true|false> error=<null|msg>
+        print(
+            f"[STEP] step={steps_taken} action={assignments_str} "
+            f"reward={reward:.2f} done={str(done).lower()} error=null",
+            flush=True
+        )
 
     raw_score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
-    # Clamp strictly within (0.0, 1.0) — validator rejects exactly 0.0 or 1.0
+    # Clamp strictly within (0.01, 0.99) — validator rejects exactly 0.0 or 1.0
     score = min(max(float(raw_score), 0.01), 0.99)
 
     print(f"\n  Total Reward : {total_reward:.1f}")
