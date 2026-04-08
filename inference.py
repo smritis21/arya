@@ -147,13 +147,15 @@ def run_task(name: str, env: SentinelEnv) -> float:
         assignments_str = ", ".join(f"{a.sensor_id}→{a.target_id}" for a in actions) if actions else "none"
         print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
 
-    score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
-    score = max(0.01, min(0.99, score))
+    raw_score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
+    # Strictly clamp within (0.0, 1.0) — validator rejects exactly 0.0 or 1.0
+    score = max(0.01, min(0.99, float(raw_score)))
+
     print(f"\n  Total Reward : {total_reward:.1f}")
     print(f"  Steps        : {info['step_count']}")
     print(f"  LLM steps    : {llm_steps}  |  Greedy fallback: {greedy_steps}")
     print(f"  Missed HIGH  : {len(info['missed_targets'])}")
-    print(f"  SCORE        : {score:.4f}  (0.0 – 1.0)")
+    print(f"  SCORE        : {score:.4f}  (strictly in 0.01 – 0.99)")
     return score
 
 
