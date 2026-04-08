@@ -123,61 +123,38 @@ def get_actions(obs) -> tuple[list[Action], str]:
 
 
 def run_task(name: str, env: SentinelEnv) -> float:
-    print(f"\n{'='*50}")
-    print(f"  TASK: {name.upper()}  |  max_steps={env.max_steps}  |  seed={env.seed}")
-    print(f"{'='*50}")
-
     obs          = env.reset()
     total_reward = 0.0
     done         = False
-    llm_steps    = 0
-    greedy_steps = 0
+    step_num     = 0
+    rewards      = []
 
-    print("[START]")
-    print(f"Sensors={len(obs.sensors)} | Targets={len(obs.targets)}")
+    print(f"[START] task={name.lower()} env=sentinel-env model={MODEL_NAME}", flush=True)
 
     while not done:
+        step_num += 1
         actions, source = get_actions(obs)
         obs, reward, done, info = env.step_batch(actions)
         total_reward += reward
-        if source == "llm":
-            llm_steps += 1
-        else:
-            greedy_steps += 1
-        assignments_str = ", ".join(f"{a.sensor_id}→{a.target_id}" for a in actions) if actions else "none"
-        print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
+        rewards.append(reward)
+        action_str = ",".join(f"{a.sensor_id}->{a.target_id}" for a in actions) if actions else "none"
+        print(f"[STEP] step={step_num} action={action_str} reward={reward:.2f} done={str(done).lower()} error=null", flush=True)
 
     score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
-    score = max(0.01, min(0.99, score))
-    print(f"\n  Total Reward : {total_reward:.1f}")
-    print(f"  Steps        : {info['step_count']}")
-    print(f"  LLM steps    : {llm_steps}  |  Greedy fallback: {greedy_steps}")
-    print(f"  Missed HIGH  : {len(info['missed_targets'])}")
-    print(f"  SCORE        : {score:.4f}  (0.0 – 1.0)")
+    score = float(max(0.01, min(0.99, score)))
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success=true steps={info['step_count']} score={score:.4f} rewards={rewards_str}", flush=True)
     return score
 
 
 if __name__ == "__main__":
     if HF_TOKEN:
         client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-        print(f"[LLM] Using model: {MODEL_NAME}\n")
     else:
         client = None
-        print("[WARN] HF_TOKEN not set — running in greedy fallback mode.\n")
+        print("[WARN] HF_TOKEN not set — running in greedy fallback mode.", flush=True)
 
-    results = {}
     for task in TASKS:
         env = task["env_fn"]()
         env.seed = task["seed"]
-        score = run_task(task["name"], env)
-        results[task["name"]] = score
-
-    print(f"\n{'='*50}")
-    print("  FINAL SCORES")
-    print(f"{'='*50}")
-    for name, score in results.items():
-        bar = "█" * int(score * 20)
-        print(f"  {name:<8} {score:.4f}  {bar}")
-    print(f"\n  Average: {sum(results.values()) / len(results):.4f}")
-    print(f"{'='*50}")
-    print("[END]")
+        run_task(task["name"], env)
