@@ -122,6 +122,12 @@ def get_actions(obs) -> tuple[list[Action], str]:
     return greedy_actions(obs), "greedy"
 
 
+def log_end(task: str, score: float, steps: int) -> None:
+    # Clamp INSIDE log_end — score is always strictly within (0, 1) when printed
+    safe_score = min(max(float(score), 0.01), 0.99)
+    print(f"[END] task={task} score={safe_score:.2f} steps={steps}", flush=True)
+
+
 def run_task(name: str, env: SentinelEnv) -> float:
     print(f"\n{'='*50}")
     print(f"  TASK: {name.upper()}  |  max_steps={env.max_steps}  |  seed={env.seed}")
@@ -132,30 +138,36 @@ def run_task(name: str, env: SentinelEnv) -> float:
     done         = False
     llm_steps    = 0
     greedy_steps = 0
+    steps_taken  = 0
 
-    print("[START]")
+    print(f"[START] task={name} env=sentinel model={MODEL_NAME}", flush=True)
     print(f"Sensors={len(obs.sensors)} | Targets={len(obs.targets)}")
 
     while not done:
         actions, source = get_actions(obs)
         obs, reward, done, info = env.step_batch(actions)
         total_reward += reward
+        steps_taken  += 1
         if source == "llm":
             llm_steps += 1
         else:
             greedy_steps += 1
         assignments_str = ", ".join(f"{a.sensor_id}→{a.target_id}" for a in actions) if actions else "none"
-        print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}")
+        print(f"[STEP] [{source.upper()}] Assignments: {assignments_str} | Reward: {reward:+.1f}", flush=True)
 
     raw_score = grade_episode(total_reward, info["step_count"], num_sensors=env.initial_sensor_count)
-    # Strictly clamp within (0.0, 1.0) — validator rejects exactly 0.0 or 1.0
-    score = max(0.01, min(0.99, float(raw_score)))
+    # Clamp strictly within (0.0, 1.0) — validator rejects exactly 0.0 or 1.0
+    score = min(max(float(raw_score), 0.01), 0.99)
 
     print(f"\n  Total Reward : {total_reward:.1f}")
     print(f"  Steps        : {info['step_count']}")
     print(f"  LLM steps    : {llm_steps}  |  Greedy fallback: {greedy_steps}")
     print(f"  Missed HIGH  : {len(info['missed_targets'])}")
     print(f"  SCORE        : {score:.4f}  (strictly in 0.01 – 0.99)")
+
+    # [END] line with clamped score — validator reads this
+    log_end(task=name, score=score, steps=steps_taken)
+
     return score
 
 
@@ -182,4 +194,3 @@ if __name__ == "__main__":
         print(f"  {name:<8} {score:.4f}  {bar}")
     print(f"\n  Average: {sum(results.values()) / len(results):.4f}")
     print(f"{'='*50}")
-    print("[END]")
