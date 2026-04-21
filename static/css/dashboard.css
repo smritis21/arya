@@ -11,6 +11,16 @@
   --orange:   #A0522D;
   --map-bg:   #D6D0A8;
   --card:     #EDE8C8;
+
+  /* ── Multi-agent agent colors ────────────────────────────────────────────── */
+  --agent-satellite: #2563eb;
+  --agent-drone:     #16a34a;
+  --agent-radar:     #d97706;
+  --agent-command:   #9333ea;
+
+  /* ── Conflict indicators ─────────────────────────────────────────────────── */
+  --conflict-red:    #e11d48;
+  --conflict-orange: #f97316;
 }
 
 html, body {
@@ -59,13 +69,60 @@ body {
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
 @keyframes ping { 0%{transform:scale(1);opacity:0.8} 100%{transform:scale(2.2);opacity:0} }
 .topbar-task { font-size: 0.7em; opacity: 0.8; letter-spacing: 0.05em; }
-.topbar-right { text-align: right; }
+.topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .clock { font-size: 1.3em; font-weight: 700; letter-spacing: 0.1em; color: var(--gold); }
+
+/* ── Mode toggle ─────────────────────────────────────────────────────────── */
+.mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  padding: 3px;
+}
+.mode-btn {
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: rgba(240,235,206,0.7);
+  font-family: inherit;
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mode-btn:hover { background: rgba(240,235,206,0.1); color: var(--bg); }
+.mode-btn.active {
+  background: var(--gold);
+  color: var(--accent);
+  border-color: var(--gold);
+}
+
+/* ── Agent chips (mini legend in multi-agent control panel) ──────────────── */
+.agent-legend-mini {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.agent-chip {
+  font-size: 0.58em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 99px;
+  color: #fff;
+}
+.agent-chip.satellite { background: var(--agent-satellite); }
+.agent-chip.drone     { background: var(--agent-drone); }
+.agent-chip.radar     { background: var(--agent-radar); }
+.agent-chip.command   { background: var(--agent-command); }
 
 /* LAYOUT */
 .layout {
   display: grid;
-  grid-template-columns: 240px 1fr 260px;
+  grid-template-columns: 240px 1fr 270px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -177,10 +234,11 @@ body {
   font-size: 0.72em;
   font-weight: 700;
   letter-spacing: 0.06em;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, transform 0.1s;
   width: 100%;
 }
 .btn:hover { opacity: 0.85; }
+.btn:active { transform: scale(0.98); }
 .btn-assign { background: var(--accent); color: var(--bg); }
 .btn-auto { background: var(--green); color: var(--bg); }
 .btn-run { background: var(--gold); color: var(--accent); margin-top: 0; }
@@ -201,8 +259,132 @@ body {
 .score-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--accent)); border-radius: 99px; transition: width 0.5s ease; }
 .score-pct { font-size: 1em; font-weight: 700; color: var(--accent); text-align: center; margin-top: 4px; }
 
+/* ── Multi-agent metrics ─────────────────────────────────────────────────── */
+.conflict-rate-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.metric-label { font-size: 0.68em; color: var(--muted); letter-spacing: 0.08em; }
+.conflict-rate-val {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--green);
+  transition: color 0.3s;
+}
+.conflict-rate-val.cr-med { color: var(--orange); }
+.conflict-rate-val.cr-high { color: var(--red); animation: pulse 1.5s infinite; }
+
+/* ── Per-agent reward cards ──────────────────────────────────────────────── */
+.agent-rewards-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.agent-reward-card {
+  border-radius: 4px;
+  padding: 8px 6px;
+  text-align: center;
+  border: 2px solid;
+  background: var(--bg);
+  transition: border-color 0.3s, background 0.3s;
+}
+.agent-reward-card.satellite {
+  border-color: var(--agent-satellite);
+}
+.agent-reward-card.drone {
+  border-color: var(--agent-drone);
+}
+.agent-reward-card.radar {
+  border-color: var(--agent-radar);
+}
+.agent-reward-card.command {
+  border-color: var(--agent-command);
+}
+.agent-reward-val {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.agent-reward-card.satellite .agent-reward-val { color: var(--agent-satellite); }
+.agent-reward-card.drone     .agent-reward-val { color: var(--agent-drone); }
+.agent-reward-card.radar     .agent-reward-val { color: var(--agent-radar); }
+.agent-reward-card.command   .agent-reward-val { color: var(--agent-command); }
+.agent-reward-lbl {
+  font-size: 0.58em;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Conflict log ────────────────────────────────────────────────────────── */
+.log-box {
+  height: 130px;
+  overflow-y: auto;
+  font-size: 0.68em;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 8px;
+}
+.log-entry { padding: 2px 0; border-bottom: 1px solid rgba(170,139,86,0.2); display: flex; gap: 6px; }
+.log-time { color: var(--gold); flex-shrink: 0; }
+.log-pos { color: var(--green); font-weight: 700; }
+.log-neg { color: var(--red); font-weight: 700; }
+.log-neu { color: var(--muted); }
+
+.conflict-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(170,139,86,0.2);
+  font-size: 0.88em;
+  flex-wrap: wrap;
+}
+.conflict-entry.conflict-ok { opacity: 0.5; }
+.conflict-entry.conflict-bad {
+  background: rgba(225,29,72,0.07);
+  border-radius: 2px;
+  padding: 3px 4px;
+}
+.conflict-step {
+  color: var(--gold);
+  font-weight: 700;
+  flex-shrink: 0;
+  min-width: 45px;
+}
+.conflict-type {
+  color: var(--conflict-red);
+  font-weight: 700;
+  font-size: 0.82em;
+  letter-spacing: 0.04em;
+}
+.conflict-agents { color: var(--muted); font-size: 0.82em; }
+.conflict-none { color: var(--green); font-size: 0.82em; }
+
+/* conflict badge in operation log */
+.conflict-badge {
+  display: inline-block;
+  background: var(--conflict-red);
+  color: #fff;
+  font-size: 0.72em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
 /* THREATS */
-.threat-list { display: flex; flex-direction: column; gap: 5px; max-height: 180px; overflow-y: auto; }
+.threat-list { display: flex; flex-direction: column; gap: 5px; max-height: 160px; overflow-y: auto; }
 .threat-item {
   display: flex;
   align-items: center;
@@ -226,21 +408,11 @@ body {
 .threat-badge.m { background: var(--orange); color: #fff; }
 .threat-badge.l { background: var(--green); color: #fff; }
 
-/* LOG */
-.log-box {
-  height: 160px;
-  overflow-y: auto;
-  font-size: 0.68em;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 8px;
-}
-.log-entry { padding: 2px 0; border-bottom: 1px solid rgba(170,139,86,0.2); display: flex; gap: 6px; }
-.log-time { color: var(--gold); flex-shrink: 0; }
-.log-pos { color: var(--green); font-weight: 700; }
-.log-neg { color: var(--red); font-weight: 700; }
-.log-neu { color: var(--muted); }
+/* ── Map legend dots for agents ──────────────────────────────────────────── */
+.legend-dot.agent-satellite { background: var(--agent-satellite); }
+.legend-dot.agent-drone     { background: var(--agent-drone); }
+.legend-dot.agent-radar     { background: var(--agent-radar); }
+.legend-dot.agent-command   { background: var(--agent-command); }
 
 /* MAP */
 .map-area { position: relative; background: var(--map-bg); overflow: hidden; display: flex; flex-direction: column; }

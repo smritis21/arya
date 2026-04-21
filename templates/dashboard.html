@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SentinelEnv — Defense Surveillance Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Arya-X: Multi-Agent ISR Sensor Allocation — real-time surveillance dashboard with LLM-powered agents, conflict detection, and negotiation layer.">
+<title>Arya-X — Multi-Agent ISR Sensor Allocation System</title>
 <link rel="stylesheet" href="/static/css/dashboard.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 </head>
@@ -13,8 +15,8 @@
   <div class="topbar-left">
     <span class="logo">&#9728;</span>
     <div>
-      <div class="topbar-title">ARYA<span>SENTINEL</span></div>
-      <div class="topbar-sub">Defense Surveillance &amp; Sensor Allocation System</div>
+      <div class="topbar-title">ARYA<span>-X</span></div>
+      <div class="topbar-sub">Multi-Agent ISR Sensor Allocation System</div>
     </div>
   </div>
   <div class="topbar-center">
@@ -22,6 +24,11 @@
     <div class="topbar-task" id="taskLabel">No task loaded</div>
   </div>
   <div class="topbar-right">
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btnSingle" onclick="setMode('single')">SINGLE</button>
+      <button class="mode-btn" id="btnMulti" onclick="setMode('multi')">MULTI-AGENT</button>
+    </div>
     <div class="clock" id="clock">--:--:--</div>
     <div class="topbar-sub">IST</div>
   </div>
@@ -69,7 +76,8 @@
       </div>
     </div>
 
-    <div class="panel-section">
+    <!-- Single-agent controls -->
+    <div class="panel-section" id="singleControls">
       <div class="section-title">MANUAL OVERRIDE</div>
       <select id="sensorSel" class="sel"><option>-- select sensor --</option></select>
       <select id="targetSel" class="sel"><option>-- select target --</option></select>
@@ -78,6 +86,21 @@
         <button class="btn btn-auto" onclick="autoStep()">&#9654; AUTO</button>
       </div>
       <button class="btn btn-run" onclick="runAll()">RUN FULL EPISODE</button>
+    </div>
+
+    <!-- Multi-agent controls -->
+    <div class="panel-section" id="multiControls" style="display:none">
+      <div class="section-title">MULTI-AGENT CONTROL</div>
+      <div class="agent-legend-mini">
+        <span class="agent-chip satellite">SAT</span>
+        <span class="agent-chip drone">DRONE</span>
+        <span class="agent-chip radar">RADAR</span>
+        <span class="agent-chip command">CMD</span>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-auto" onclick="autoMultiStep()">&#9654; AUTO MULTI</button>
+      </div>
+      <button class="btn btn-run" onclick="runAllMulti()">RUN FULL EPISODE</button>
     </div>
 
     <div class="panel-section">
@@ -109,6 +132,11 @@
         <div class="legend-item"><span class="legend-dot threat-h"></span>HIGH Threat</div>
         <div class="legend-item"><span class="legend-dot threat-m"></span>MED Threat</div>
         <div class="legend-item"><span class="legend-dot threat-l"></span>LOW Threat</div>
+        <!-- Multi-agent legend (shown in multi mode) -->
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-satellite"></span>Satellite Agent</div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-drone"></span>Drone Agent</div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-radar"></span>Radar Agent</div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-command"></span>Command Agent</div>
       </div>
       <div class="map-overlay" id="mapOverlay">
         <div class="overlay-icon">&#9728;</div>
@@ -147,11 +175,44 @@
       <div class="score-pct" id="scorePct">0.000</div>
     </div>
 
+    <!-- Multi-agent metrics panel (shown in multi mode) -->
+    <div class="panel-section" id="multiMetrics" style="display:none">
+      <div class="section-title">MULTI-AGENT METRICS</div>
+      <div class="conflict-rate-row">
+        <span class="metric-label">Conflict Rate</span>
+        <span class="conflict-rate-val" id="conflictRate">0.000</span>
+      </div>
+      <div class="agent-rewards-grid" id="agentRewardsGrid">
+        <div class="agent-reward-card satellite">
+          <div class="agent-reward-val" id="rewardSatellite">0.0</div>
+          <div class="agent-reward-lbl">Satellite</div>
+        </div>
+        <div class="agent-reward-card drone">
+          <div class="agent-reward-val" id="rewardDrone">0.0</div>
+          <div class="agent-reward-lbl">Drone</div>
+        </div>
+        <div class="agent-reward-card radar">
+          <div class="agent-reward-val" id="rewardRadar">0.0</div>
+          <div class="agent-reward-lbl">Radar</div>
+        </div>
+        <div class="agent-reward-card command">
+          <div class="agent-reward-val" id="rewardCommand">0.0</div>
+          <div class="agent-reward-lbl">Command</div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel-section">
       <div class="section-title">ACTIVE THREATS</div>
       <div id="threatList" class="threat-list">
         <div class="empty-state">No active threats</div>
       </div>
+    </div>
+
+    <!-- Conflict log (shown in multi mode) -->
+    <div class="panel-section" id="conflictPanel" style="display:none">
+      <div class="section-title">CONFLICT LOG <span id="conflictCount" style="float:right;color:var(--red);font-size:0.9em"></span></div>
+      <div class="log-box" id="conflictLog" style="height:120px"></div>
     </div>
 
     <div class="panel-section">
@@ -176,4 +237,5 @@
     <pre id="summaryText" style="color:#c8d4b8;font-family:'Courier New',monospace;font-size:0.82em;white-space:pre-wrap;line-height:1.6;margin:0;"></pre>
   </div>
 </div>
+</body>
 </html>

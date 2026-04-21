@@ -1,5 +1,5 @@
 spec_version: 1
-name: sentinel-env
+name: arya-x
 type: environment
 
 runtime:
@@ -7,15 +7,90 @@ runtime:
   entrypoint: server:app
   port: 7860
 
-environment:
-  endpoints:
-    reset: /reset
-    step: /step
-    state: /state
-    grade: /grade
+# ── Modes ─────────────────────────────────────────────────────────────────────
+modes:
+  single_agent:
+    description: "Classic single-agent sensor allocation (SentinelEnv)"
+    endpoints:
+      reset:  /reset
+      step:   /step
+      auto:   /step/auto
+      state:  /state
+      grade:  /grade
 
+  multi_agent:
+    description: "Arya-X multi-agent mode — 4 agents negotiate via ConflictResolver"
+    multi_agent: true
+    agents:
+      - id: satellite
+        description: "Satellite sensor specialist — long-range wide-area coverage"
+      - id: drone
+        description: "Drone sensor specialist — medium-range tactical coverage"
+      - id: radar
+        description: "Radar sensor specialist — short-range precision tracking"
+      - id: command
+        description: "Command agent — override authority and conflict arbitration"
+    endpoints:
+      reset:  /reset_multi
+      step:   /step_multi
+      auto:   /auto_multi
 
+# ── Observation schema (multi-agent) ─────────────────────────────────────────
+observation_schema:
+  multi_agent:
+    type: object
+    description: "Keyed by agent_id. Each value is an AgentObservation."
+    properties:
+      agent_id:   { type: string }
+      agent_type: { type: string, enum: [satellite, drone, radar, command] }
+      timestep:   { type: integer }
+      sensors:
+        type: array
+        items:
+          properties:
+            id:        { type: string }
+            type:      { type: string, enum: [satellite, drone, radar] }
+            range:     { type: number, description: "Detection range in km" }
+            available: { type: boolean }
+      targets:
+        type: array
+        items:
+          properties:
+            id:       { type: string }
+            priority: { type: integer, enum: [1, 2, 3], description: "1=LOW 2=MED 3=HIGH" }
+            active:   { type: boolean }
+
+# ── Action schema (multi-agent) ───────────────────────────────────────────────
+action_schema:
+  multi_agent:
+    type: object
+    description: "Request body for /step_multi"
+    properties:
+      proposals:
+        type: array
+        items:
+          properties:
+            agent_id:  { type: string, enum: [satellite, drone, radar, command] }
+            sensor_id: { type: string }
+            target_id: { type: string }
+
+# ── Conflict types ────────────────────────────────────────────────────────────
+conflict_types:
+  - REDUNDANT_COVERAGE   # two agents assign to same target
+  - OVER_ASSIGNMENT      # same sensor claimed by two agents
+  - MISSED_PRIORITY_3    # high-priority target uncovered
+  - FORCED_ARBITRATION   # command agent override used
+
+# ── Reward components ─────────────────────────────────────────────────────────
+reward:
+  priority_3_hit:  +2.0
+  priority_2_hit:  +1.0
+  priority_1_hit:  +0.5
+  idle_penalty:    -2.0
+  conflict_penalty: -0.5
+
+# ── Environment variables ─────────────────────────────────────────────────────
 env_vars:
   API_BASE_URL: "https://router.huggingface.co/v1"
-  MODEL_NAME: "meta-llama/Meta-Llama-3-8B-Instruct"
-  HF_TOKEN: ""
+  MODEL_NAME:   "meta-llama/Meta-Llama-3-8B-Instruct"
+  HF_TOKEN:     ""
