@@ -1,14 +1,24 @@
+// ── Mode ───────────────────────────────────────────────────────────────────────
+let currentMode = 'single';   // 'single' | 'multi'
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let totalReward = 0, stepCount = 0, maxSteps = 20, done = false;
 let currentTask = 'Easy', currentSeed = 42;
 let sensors = [], envTargets = [], customTargets = [];
 let episodeLog = [], obsLoaded = false;
 
+// Multi-agent state
+let mxDone = false;
+let mxStepCount = 0;
+let agentRewardsCumulative = { satellite: 0, drone: 0, radar: 0, command: 0 };
+let conflictLog = [];
+
 // Leaflet map + layer references
 let map = null;
-const sensorMarkers = {};   // id → L.marker
-const targetMarkers = {};   // id → L.marker
-const arcLines = [];        // L.polyline[]
+const sensorMarkers = {};      // id → L.marker
+const targetMarkers = {};      // id → L.marker
+const arcLines = [];           // L.polyline[]
+const agentArcLines = [];      // agent-colored arcs for multi mode
 
 // Snapshot of all target metadata (priority etc.) keyed by id — survives deactivation
 const targetMeta = {};
@@ -24,7 +34,7 @@ const SENSOR_POS = {
 const CITY_NAMES = {
   S1: 'Delhi', S2: 'Mumbai', S3: 'Chennai', S4: 'Kolkata', S5: 'Hyderabad'
 };
-const customSensorPos = {};   // id → [lat, lon] when dragged
+const customSensorPos = {};    // id → [lat, lon] when dragged
 
 // ── Threat zones for env targets ──────────────────────────────────────────────
 const THREAT_ZONES = [
@@ -32,9 +42,18 @@ const THREAT_ZONES = [
   [22.0, 69.0], [27.5, 88.5], [30.5, 71.0], [15.0, 74.0]
 ];
 
-const allTargetPos = {};   // id → [lat, lon]
+const allTargetPos = {};       // id → [lat, lon]
 let nextCustomId = 1;
 
+// ── Agent color palette ────────────────────────────────────────────────────────
+const AGENT_COLORS = {
+  satellite: '#2563eb',   // blue
+  drone:     '#16a34a',   // green
+  radar:     '#d97706',   // amber
+  command:   '#9333ea',   // purple
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getTargetPos(id) {
   if (allTargetPos[id]) return allTargetPos[id];
   let h = 0;
@@ -58,9 +77,9 @@ function initMap() {
 }
 
 // ── Marker helpers ────────────────────────────────────────────────────────────
-function sensorIcon(type, available) {
+function sensorIcon(type, available, agentColor) {
   const colors = { satellite: '#395144', drone: '#4E6C50', radar: '#AA8B56' };
-  const c = colors[type] || '#395144';
+  const c = agentColor || colors[type] || '#395144';
   const opacity = available ? 1 : 0.4;
   const letter = type[0].toUpperCase();
   return L.divIcon({
@@ -73,17 +92,19 @@ function sensorIcon(type, available) {
   });
 }
 
-function threatIcon(priority) {
+function threatIcon(priority, hasConflict) {
   const colors = { 3: '#8B2E2E', 2: '#A0522D', 1: '#4E6C50' };
   const sizes  = { 3: 26, 2: 22, 1: 18 };
   const c = colors[priority] || '#4E6C50';
   const s = sizes[priority] || 18;
   const pulse = priority === 3
     ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:2px solid ${c};opacity:0.5;animation:ping 1.2s infinite"></div>` : '';
+  const conflictRing = hasConflict
+    ? `<div style="position:absolute;inset:-10px;border-radius:50%;border:2px dashed #e11d48;opacity:0.9;animation:ping 0.8s infinite"></div>` : '';
   return L.divIcon({
     className: '',
     html: `<div style="position:relative;width:${s}px;height:${s}px">
-      ${pulse}
+      ${conflictRing}${pulse}
       <div style="width:0;height:0;border-left:${s/2}px solid transparent;
         border-right:${s/2}px solid transparent;border-bottom:${s}px solid ${c};
         filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))"></div>
@@ -100,7 +121,6 @@ function renderSensors(data) {
     const pos = getSensorPos(s.id);
     if (sensorMarkers[s.id]) {
       sensorMarkers[s.id].setIcon(sensorIcon(s.type, s.available));
-      // Don't move marker if user has dragged it — position already updated
     } else {
       const m = L.marker(pos, {
         icon: sensorIcon(s.type, s.available),
@@ -111,7 +131,6 @@ function renderSensors(data) {
       m.on('dragend', async e => {
         const ll = e.target.getLatLng();
         customSensorPos[s.id] = [ll.lat, ll.lng];
-        // Reverse geocode to get place name
         let placeName = `${ll.lat.toFixed(1)}°N, ${ll.lng.toFixed(1)}°E`;
         try {
           const geo = await fetch(
@@ -123,7 +142,6 @@ function renderSensors(data) {
         } catch (_) {}
         CITY_NAMES[s.id] = placeName;
         m.setTooltipContent(`<b>${s.id}</b><br>${s.type}<br>${placeName}`);
-        // Refresh sidebar so dropdown shows new location name
         renderSensors(sensors);
         addLog(`${s.type} sensor moved to ${placeName}`, 'log-neu');
       });
@@ -131,7 +149,6 @@ function renderSensors(data) {
     }
   });
 
-  // Update sidebar sensor list
   document.getElementById('sensorList').innerHTML = data.map(s => {
     const dc = s.type === 'satellite' ? 'sat' : s.type === 'drone' ? 'drone' : 'radar';
     return `<div class="sensor-item ${s.available ? 'available' : 'busy'}">
@@ -147,14 +164,14 @@ function renderSensors(data) {
 }
 
 // ── Render targets on map ─────────────────────────────────────────────────────
-function renderEnvTargets(data) {
-  // Snapshot metadata before targets get deactivated
+function renderEnvTargets(data, conflictTargetIds) {
+  const conflictSet = new Set(conflictTargetIds || []);
+
   data.forEach(t => {
     targetMeta[t.id] = { priority: t.priority };
     if (!allTargetPos[t.id]) getTargetPos(t.id);
   });
 
-  // Remove markers for targets no longer in observation
   const activeIds = new Set(data.map(t => t.id));
   Object.keys(targetMarkers).forEach(id => {
     if (!id.startsWith('C') && !activeIds.has(id)) {
@@ -165,12 +182,13 @@ function renderEnvTargets(data) {
 
   data.filter(t => t.active).forEach(t => {
     const pos = getTargetPos(t.id);
+    const hasConflict = conflictSet.has(t.id);
     if (targetMarkers[t.id]) {
-      targetMarkers[t.id].setIcon(threatIcon(t.priority));
+      targetMarkers[t.id].setIcon(threatIcon(t.priority, hasConflict));
     } else {
       const lvl = t.priority === 3 ? 'HIGH' : t.priority === 2 ? 'MED' : 'LOW';
-      const m = L.marker(pos, { icon: threatIcon(t.priority), title: t.id }).addTo(map);
-      m.bindTooltip(`<b>${t.id}</b><br>Priority: ${lvl}`, { direction: 'top' });
+      const m = L.marker(pos, { icon: threatIcon(t.priority, hasConflict), title: t.id }).addTo(map);
+      m.bindTooltip(`<b>${t.id}</b><br>Priority: ${lvl}${hasConflict ? '<br><span style="color:#e11d48">⚡ CONFLICT</span>' : ''}`, { direction: 'top' });
       targetMarkers[t.id] = m;
     }
   });
@@ -179,20 +197,26 @@ function renderEnvTargets(data) {
   refreshThreatPanel();
 }
 
-// ── Arc (projectile line) ─────────────────────────────────────────────────────
+// ── Arc helpers ───────────────────────────────────────────────────────────────
 function spawnArc(sensorId, targetId, reward) {
   const sp = getSensorPos(sensorId);
   const tp = getTargetPos(targetId);
   const color = reward > 0 ? '#4E6C50' : '#8B2E2E';
-  const line = L.polyline([sp, tp], {
-    color, weight: 2, dashArray: '6 4', opacity: 0.85
-  }).addTo(map);
+  const line = L.polyline([sp, tp], { color, weight: 2, dashArray: '6 4', opacity: 0.85 }).addTo(map);
   arcLines.push(line);
-  // Fade out after 3s
   setTimeout(() => { map.removeLayer(line); }, 3000);
 }
 
-// ── Map click to place custom threats ────────────────────────────────────────
+function spawnAgentArc(sensorId, targetId, agentId) {
+  const sp = getSensorPos(sensorId);
+  const tp = getTargetPos(targetId);
+  const color = AGENT_COLORS[agentId] || '#888';
+  const line = L.polyline([sp, tp], { color, weight: 2.5, dashArray: '8 4', opacity: 0.9 }).addTo(map);
+  agentArcLines.push(line);
+  setTimeout(() => { try { map.removeLayer(line); } catch(_){} }, 4000);
+}
+
+// ── Map click to place custom threats ─────────────────────────────────────────
 let activeTool = 'move';
 
 function setTool(tool) {
@@ -219,7 +243,25 @@ async function api(method, path, body) {
   return r.json();
 }
 
-// ── Label helpers (for summary) ───────────────────────────────────────────────
+// ── Mode toggle ───────────────────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btnSingle').classList.toggle('active', mode === 'single');
+  document.getElementById('btnMulti').classList.toggle('active', mode === 'multi');
+
+  document.getElementById('singleControls').style.display  = mode === 'single' ? '' : 'none';
+  document.getElementById('multiControls').style.display   = mode === 'multi'  ? '' : 'none';
+  document.getElementById('multiMetrics').style.display    = mode === 'multi'  ? '' : 'none';
+  document.getElementById('conflictPanel').style.display   = mode === 'multi'  ? '' : 'none';
+
+  document.querySelectorAll('.multi-legend').forEach(el => {
+    el.style.display = mode === 'multi' ? '' : 'none';
+  });
+
+  addLog(`Switched to ${mode === 'multi' ? 'MULTI-AGENT' : 'SINGLE-AGENT'} mode`, 'log-neu');
+}
+
+// ── Label helpers ─────────────────────────────────────────────────────────────
 function sensorLabel(id) {
   const s = sensors.find(x => x.id === id);
   const city = CITY_NAMES[id] || id;
@@ -253,7 +295,30 @@ function refreshThreatPanel() {
     .map(t => `<option value="${t.id}">${t.id} (p${t.priority}${t.id.startsWith('C') ? ', custom' : ''})</option>`).join('');
 }
 
-// ── Log ───────────────────────────────────────────────────────────────────────
+// ── Conflict log ──────────────────────────────────────────────────────────────
+function addConflictEntry(conflicts, step) {
+  const box = document.getElementById('conflictLog');
+  if (!conflicts || conflicts.length === 0) {
+    const d = document.createElement('div');
+    d.className = 'conflict-entry conflict-ok';
+    d.innerHTML = `<span class="conflict-step">Step ${step}</span><span class="conflict-none">✓ No conflicts</span>`;
+    box.prepend(d);
+    return;
+  }
+  conflicts.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'conflict-entry conflict-bad';
+    const agents = c.agents && c.agents.length ? c.agents.join(', ') : '—';
+    const target = c.target_id ? ` → ${c.target_id}` : '';
+    const sensor = c.sensor_id ? ` [${c.sensor_id}]` : '';
+    d.innerHTML = `<span class="conflict-step">Step ${step}</span>
+      <span class="conflict-type">${c.type}</span>
+      <span class="conflict-agents">${agents}${sensor}${target}</span>`;
+    box.prepend(d);
+  });
+}
+
+// ── General log ───────────────────────────────────────────────────────────────
 function addLog(text, cls) {
   const box = document.getElementById('logBox');
   const d = document.createElement('div');
@@ -274,6 +339,29 @@ function updateStats(reward, info) {
   const score = best === worst ? 0 : Math.max(0, Math.min(1, (totalReward - worst) / (best - worst)));
   document.getElementById('scoreBar').style.width = (score * 100) + '%';
   document.getElementById('scorePct').textContent = score.toFixed(3);
+}
+
+function updateMultiStats(stepRewards, agentRewards, conflictRate, conflicts, step) {
+  // Cumulative agent rewards
+  Object.keys(agentRewards).forEach(a => {
+    agentRewardsCumulative[a] = agentRewards[a];
+  });
+  document.getElementById('rewardSatellite').textContent = agentRewardsCumulative.satellite.toFixed(1);
+  document.getElementById('rewardDrone').textContent     = agentRewardsCumulative.drone.toFixed(1);
+  document.getElementById('rewardRadar').textContent     = agentRewardsCumulative.radar.toFixed(1);
+  document.getElementById('rewardCommand').textContent   = agentRewardsCumulative.command.toFixed(1);
+
+  // Conflict rate — color coding
+  const crEl = document.getElementById('conflictRate');
+  crEl.textContent = conflictRate.toFixed(3);
+  crEl.className = 'conflict-rate-val' + (conflictRate > 0.5 ? ' cr-high' : conflictRate > 0.2 ? ' cr-med' : ' cr-ok');
+
+  // Step counter (share the same step display)
+  mxStepCount = step;
+  document.getElementById('statStep').textContent = step;
+
+  // Conflict log entry
+  addConflictEntry(conflicts, step);
 }
 
 function setActiveTask(name) {
@@ -318,40 +406,97 @@ VERDICT: ${verdict}`;
   document.getElementById('summaryModal').style.display = 'flex';
 }
 
-// ── Actions ───────────────────────────────────────────────────────────────────
+function showMultiSummary(info) {
+  const ar = agentRewardsCumulative;
+  const totalCumReward = Object.values(ar).reduce((a, b) => a + b, 0);
+  const conflictRateFinal = info.conflict_rate || 0;
+
+  const assignmentLines = (info.assignments || []).map((a, i) =>
+    `Step ${i + 1}: [${(a.agent || '?').toUpperCase()}] ${sensorLabel(a.sensor)} → ${targetLabel(a.target)}`
+  ).join('\n');
+
+  const verdict = conflictRateFinal < 0.1 ? 'Excellent coordination — minimal conflicts.'
+    : conflictRateFinal < 0.3 ? 'Good coordination — moderate conflicts resolved.'
+    : 'High conflict rate — agents need better negotiation.';
+
+  const agentLines = Object.entries(ar).map(([a, r]) => `  ${a.padEnd(12)}: ${r.toFixed(2)}`).join('\n');
+
+  const summary = `EPISODE SUMMARY — MULTI-AGENT MODE
+${'─'.repeat(50)}
+Mission: ${currentTask.toUpperCase()} | Agents: satellite, drone, radar, command
+Steps completed: ${mxStepCount}
+
+PER-AGENT CUMULATIVE REWARDS:
+${agentLines}
+
+TOTAL REWARD: ${totalCumReward.toFixed(2)}
+CONFLICT RATE: ${conflictRateFinal.toFixed(4)} (${(conflictRateFinal * 100).toFixed(1)}% of steps had conflicts)
+
+ASSIGNMENTS:
+${assignmentLines}
+
+VERDICT: ${verdict}`;
+
+  document.getElementById('summaryText').textContent = summary;
+  document.getElementById('summaryModal').style.display = 'flex';
+}
+
+// ── Single-agent actions ───────────────────────────────────────────────────────
 async function loadTask(steps, seed, name, threatLevel) {
   totalReward = 0; stepCount = 0; maxSteps = steps; done = false;
+  mxDone = false; mxStepCount = 0;
   currentTask = name; currentSeed = seed;
   episodeLog = [];
   customTargets = []; nextCustomId = 1;
   envTargets = [];
+  agentRewardsCumulative = { satellite: 0, drone: 0, radar: 0, command: 0 };
+  conflictLog = [];
+
   Object.keys(allTargetPos).forEach(k => delete allTargetPos[k]);
   Object.keys(targetMeta).forEach(k => delete targetMeta[k]);
 
-  // Clear map layers
   Object.values(sensorMarkers).forEach(m => map.removeLayer(m));
   Object.keys(sensorMarkers).forEach(k => delete sensorMarkers[k]);
   Object.values(targetMarkers).forEach(m => map.removeLayer(m));
   Object.keys(targetMarkers).forEach(k => delete targetMarkers[k]);
-  arcLines.forEach(l => map.removeLayer(l));
-  arcLines.length = 0;
+  arcLines.forEach(l => map.removeLayer(l)); arcLines.length = 0;
+  agentArcLines.forEach(l => { try { map.removeLayer(l); } catch(_){} }); agentArcLines.length = 0;
 
   document.getElementById('logBox').innerHTML = '';
+  document.getElementById('conflictLog').innerHTML = '';
   ['statStep', 'statReward', 'statMissed', 'statAssigned'].forEach(id =>
     document.getElementById(id).textContent = '0');
   document.getElementById('scoreBar').style.width = '0%';
   document.getElementById('scorePct').textContent = '0.000';
   document.getElementById('gradeVal').textContent = '--';
   document.getElementById('gradeSub').textContent = 'Run grader to evaluate';
+  ['rewardSatellite','rewardDrone','rewardRadar','rewardCommand'].forEach(id =>
+    document.getElementById(id).textContent = '0.0');
+  document.getElementById('conflictRate').textContent = '0.000';
   setActiveTask(name);
 
   document.querySelectorAll('.btn-assign,.btn-auto,.btn-run,.btn-grade').forEach(b => b.disabled = true);
-  const obs = await api('POST', '/reset', { max_steps: steps });
-  currentSeed = obs.seed || seed;
-  document.querySelectorAll('.btn-assign,.btn-auto,.btn-run,.btn-grade').forEach(b => b.disabled = false);
 
-  renderSensors(obs.sensors);
-  renderEnvTargets(obs.targets);
+  let obs;
+  if (currentMode === 'multi') {
+    obs = await api('POST', '/reset_multi', { max_steps: steps });
+    currentSeed = obs.seed || seed;
+    // Use the first agent's observation for rendering sensors/targets
+    const firstAgentObs = obs.observations ? obs.observations['satellite'] : null;
+    if (firstAgentObs) {
+      renderSensors(firstAgentObs.sensors);
+      renderEnvTargets(firstAgentObs.targets);
+    }
+    addLog(`[MULTI] Mission started: ${name} — 4 agents active, ${steps} steps`, 'log-neu');
+  } else {
+    obs = await api('POST', '/reset', { max_steps: steps });
+    currentSeed = obs.seed || seed;
+    renderSensors(obs.sensors);
+    renderEnvTargets(obs.targets);
+    addLog(`Mission started: ${name} task with ${obs.sensors.length} sensors and ${obs.targets.length} initial threats.`, 'log-neu');
+  }
+
+  document.querySelectorAll('.btn-assign,.btn-auto,.btn-run,.btn-grade').forEach(b => b.disabled = false);
 
   document.getElementById('taskLabel').textContent    = name.toUpperCase() + ' — ' + threatLevel;
   document.getElementById('statusPill').innerHTML     = '&#9679; ' + threatLevel;
@@ -360,7 +505,6 @@ async function loadTask(steps, seed, name, threatLevel) {
   document.getElementById('toolHint').textContent     = 'Drag sensors to reposition | Use toolbar to place custom threats';
 
   obsLoaded = true;
-  addLog(`Mission started: ${name} task with ${obs.sensors.length} sensors and ${obs.targets.length} initial threats.`, 'log-neu');
 }
 
 async function manualStep() {
@@ -388,28 +532,21 @@ async function autoStep() {
   if (r.error) return addLog('ERROR: ' + r.error, 'log-neg');
   done = r.done;
   const actions = r.actions || (r.action ? [r.action] : []);
-  if (actions.length === 0) {
-    if (r.done) showSummary(r.info);
-    return;
-  }
+  if (actions.length === 0) { if (r.done) showSummary(r.info); return; }
   actions.forEach(a => spawnArc(a.sensor_id, a.target_id, r.reward));
   renderSensors(r.observation.sensors);
   renderEnvTargets(r.observation.targets);
   updateStats(r.reward, r.info);
   const c = r.reward > 0 ? 'log-pos' : r.reward < 0 ? 'log-neg' : 'log-neu';
   const agentTag = r.agent === 'llm' ? ' <span style="color:#AA8B56">[LLM]</span>' : ' <span style="opacity:0.5">[greedy]</span>';
-  const desc = actions.map(a =>
-    `The ${sensorLabel(a.sensor_id)} → ${targetLabel(a.target_id)}`
-  ).join(' | ');
+  const desc = actions.map(a => `The ${sensorLabel(a.sensor_id)} → ${targetLabel(a.target_id)}`).join(' | ');
   addLog(`[Auto]${agentTag} ${desc}. Reward: ${r.reward > 0 ? '+' : ''}${r.reward}${r.done ? ' — Mission complete.' : ''}`, c);
   if (r.done) showSummary(r.info);
 }
 
 async function runAll() {
   if (!obsLoaded) return addLog('Load a mission first', 'log-neg');
-  if (done) {
-    await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING');
-  }
+  if (done) { await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING'); }
   while (!done) {
     await autoStep();
     await new Promise(r => setTimeout(r, 300));
@@ -417,6 +554,70 @@ async function runAll() {
   }
 }
 
+// ── Multi-agent actions ───────────────────────────────────────────────────────
+async function autoMultiStep() {
+  if (!obsLoaded) return addLog('Load a mission first', 'log-neg');
+  if (mxDone) return addLog('Episode complete — reload mission', 'log-neg');
+
+  const r = await api('POST', '/auto_multi');
+  if (r.error) return addLog('ERROR: ' + r.error, 'log-neg');
+  mxDone = r.done;
+
+  // Draw agent-colored arcs for proposals
+  const proposals = r.proposals || [];
+  proposals.forEach(p => spawnAgentArc(p.sensor_id, p.target_id, p.agent_id));
+
+  // Use first agent's observation for display
+  const agentObs = r.observations;
+  const firstObs = agentObs ? agentObs['satellite'] : null;
+
+  // Collect conflict target IDs for overlay
+  const conflictTargetIds = (r.conflicts || [])
+    .filter(c => c.target_id).map(c => c.target_id);
+
+  if (firstObs) {
+    renderSensors(firstObs.sensors);
+    renderEnvTargets(firstObs.targets, conflictTargetIds);
+  }
+
+  // Update step / stats
+  if (r.info) {
+    updateMultiStats(r.step_rewards || {}, r.agent_rewards || {}, r.conflict_rate || 0, r.conflicts || [], r.info.step_count);
+    const totalStepRwd = Object.values(r.step_rewards || {}).reduce((a,b)=>a+b,0);
+    totalReward += totalStepRwd;
+    document.getElementById('statReward').textContent = totalReward.toFixed(1);
+    document.getElementById('statMissed').textContent = (r.info.missed_targets || []).length;
+    document.getElementById('statAssigned').textContent = (r.info.assignments || []).length;
+  }
+
+  const source = r.agent === 'llm'
+    ? '<span style="color:#AA8B56">[LLM]</span>'
+    : '<span style="opacity:0.5">[greedy]</span>';
+  const propDesc = proposals.map(p => {
+    const agColor = AGENT_COLORS[p.agent_id] || '#888';
+    return `<span style="color:${agColor}">[${p.agent_id}]</span> ${p.sensor_id}→${p.target_id}`;
+  }).join(' ');
+
+  const conflictStr = r.conflicts && r.conflicts.length
+    ? ` <span class="conflict-badge">⚡ ${r.conflicts.length} conflict(s)</span>`
+    : '';
+
+  addLog(`[Multi] ${source} ${propDesc || 'no proposals'}${conflictStr}${r.done ? ' — Episode done.' : ''}`, 'log-neu');
+
+  if (r.done) showMultiSummary(r.info);
+}
+
+async function runAllMulti() {
+  if (!obsLoaded) return addLog('Load a mission first', 'log-neg');
+  if (mxDone) { await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING'); }
+  while (!mxDone) {
+    await autoMultiStep();
+    await new Promise(r => setTimeout(r, 350));
+    if (mxDone) break;
+  }
+}
+
+// ── Grader ────────────────────────────────────────────────────────────────────
 async function runGrade() {
   document.getElementById('gradeVal').textContent = '...';
   document.getElementById('gradeSub').textContent = 'Computing...';
@@ -441,7 +642,6 @@ setInterval(updateClock, 1000); updateClock();
 window.addEventListener('load', () => {
   initMap();
 
-  // Place custom threats on map click
   map.on('click', e => {
     if (!obsLoaded || activeTool === 'move') return;
     const lat = e.latlng.lat, lon = e.latlng.lng;
@@ -453,7 +653,7 @@ window.addEventListener('load', () => {
     api('POST', '/targets/custom', { id, priority, lat, lon });
 
     const lvl = priority === 3 ? 'HIGH' : priority === 2 ? 'MED' : 'LOW';
-    const m = L.marker([lat, lon], { icon: threatIcon(priority) }).addTo(map);
+    const m = L.marker([lat, lon], { icon: threatIcon(priority, false) }).addTo(map);
     m.bindTooltip(`<b>${id}</b><br>Priority: ${lvl} (custom)`, { direction: 'top' });
     targetMarkers[id] = m;
 
@@ -462,4 +662,5 @@ window.addEventListener('load', () => {
   });
 
   setTool('move');
+  setMode('single');
 });

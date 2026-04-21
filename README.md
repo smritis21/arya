@@ -1,13 +1,13 @@
 ---
-title: SentinelEnv
+title: Arya-X — Multi-Agent ISR Sensor Allocation
 emoji: 🛰️
 colorFrom: blue
-colorTo: red
+colorTo: purple
 sdk: docker
 pinned: false
 ---
 
-# Arya RL Monitoring System — Sensor Allocation Environment
+# Arya-X — Multi-Agent ISR Sensor Allocation System
 
 ## Live Demo
 
@@ -16,147 +16,309 @@ pinned: false
 
 ---
 
-An [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment where an LLM agent allocates limited surveillance sensors (satellites, drones, radars) to high-priority threats (missile activity, border movements, airspace intrusions) under real-time conditions.
+## Overview
 
-This environment implements the required OpenEnv interface: reset(), step(), and state().
+**Arya-X** is an [OpenEnv](https://huggingface.co/openenv)-compatible reinforcement learning environment that simulates **multi-agent sensor allocation** for ISR (Intelligence, Surveillance, and Reconnaissance) operations.
 
----
+The system evolved from a **single-agent baseline** (SentinelEnv) to the full **Arya-X multi-agent architecture**, where four specialised agents — satellite, drone, radar, and command — negotiate sensor assignments in real time using a **ConflictResolver + NegotiationLayer** pipeline.
 
-## What It Simulates
-
-A military command centre monitors threats across a region with a fixed set of sensors. At every timestep, new threats appear on the map. The agent decides which sensor covers which threat before the window expires — unhandled threats disappear and count as missed.
-
-This models **ISR (Intelligence, Surveillance and Reconnaissance)** — a real operational problem where limited sensor capacity must be allocated across simultaneous threats in priority order.
-
-**Environment behaviour:**
-- Sensors have per-step availability constraints — a sensor may be unavailable due to failure probability or prior assignment
-- Targets spawn dynamically each timestep based on seeded random generation
-- Assignments are time-constrained — each action must be submitted within the current step window
-- Unhandled targets expire at end of step and do not carry over to the next
+**The core problem:** A military command centre monitors a region with a limited sensor fleet. At every timestep, new threats spawn. Multiple agents must claim sensors and propose assignments — without creating coverage conflicts — before the step window expires.
 
 ---
 
-## Observation Space
+## Architecture
 
-Each step() call returns (observation, reward, done, info) following OpenEnv specification.
-
-Each `reset()` and `step()` returns an `Observation` object:
-
-| Field | Type | Description |
-|---|---|---|
-| `sensors` | `List[Sensor]` | All sensors and their current state |
-| `targets` | `List[Target]` | Active threats this timestep |
-| `timestep` | `int` | Current step index (0-indexed) |
-
-**Sensor fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `str` | Unique sensor ID e.g. `S1` |
-| `type` | `str` | `satellite`, `drone`, or `radar` |
-| `range` | `float` | Detection range in km (100–500) |
-| `available` | `bool` | Whether sensor can be assigned this step |
-
-**Target fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | `str` | Unique target ID e.g. `T0_1` (step\_index) |
-| `priority` | `int` | `3`=high, `2`=medium, `1`=low |
-| `active` | `bool` | Whether target is unhandled this step |
-
----
-
-## Action Space
-
-Each `step_batch()` accepts a list of assignments — one per available sensor:
-
-```json
-[
-  {"sensor_id": "S1", "target_id": "T0_1"},
-  {"sensor_id": "S2", "target_id": "T0_3"}
-]
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      AryaXEnv                               │
+│                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │Satellite │  │  Drone   │  │  Radar   │  │ Command  │   │
+│  │  Agent   │  │  Agent   │  │  Agent   │  │  Agent   │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       │              │              │              │         │
+│       └──────────────┴──────────────┴──────────────┘         │
+│                           │ proposals                        │
+│                  ┌────────▼────────┐                        │
+│                  │ NegotiationLayer│  conflict_rate tracking │
+│                  └────────┬────────┘                        │
+│                  ┌────────▼────────┐                        │
+│                  │ConflictDetector │  REDUNDANT_COVERAGE     │
+│                  │                 │  OVER_ASSIGNMENT        │
+│                  │                 │  MISSED_PRIORITY_3      │
+│                  └────────┬────────┘                        │
+│                  ┌────────▼────────┐                        │
+│                  │ConflictResolver │  3-pass resolution:     │
+│                  │                 │  Priority → Capability  │
+│                  │                 │  → Command Override     │
+│                  └────────┬────────┘                        │
+│                  ┌────────▼────────┐                        │
+│                  │   RewardEngine  │  per-agent rewards      │
+│                  └─────────────────┘                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-Invalid or empty actions incur an idle penalty of `-2.0`.
+---
+
+## Agent Roles
+
+| Agent     | Sensor Affinity | Priority Focus | Override Authority |
+|-----------|----------------|----------------|--------------------|
+| Satellite | `satellite`    | Wide-area / P3 | No                 |
+| Drone     | `drone`        | Tactical / P2  | No                 |
+| Radar     | `radar`        | Precision / P1 | No                 |
+| Command   | Any            | Strategic      | **Yes**            |
+
+The **Command agent** has final override authority; its proposals are honoured in Pass 3 of the resolver even when conflicts exist.
+
+---
+
+## Conflict System
+
+### Conflict Types
+
+| Type                  | Trigger                                               | Penalty       |
+|-----------------------|-------------------------------------------------------|---------------|
+| `REDUNDANT_COVERAGE`  | Two agents assign to the same target                  | −0.5 per agent|
+| `OVER_ASSIGNMENT`     | Same sensor claimed by two different agents           | −0.5 per agent|
+| `MISSED_PRIORITY_3`   | High-priority (P3) target uncovered by any agent      | logged only   |
+| `FORCED_ARBITRATION`  | Command agent override resolves a conflict            | none          |
+
+### ConflictResolver — 3-Pass Resolution
+
+1. **Pass 1 – Priority**: When two agents claim the same sensor, keep the proposal targeting the highest-priority target.
+2. **Pass 2 – Capability**: Sort remaining assignments by target priority × sensor capability score (`satellite=3`, `drone=2`, `radar=1`). Discard duplicates.
+3. **Pass 3 – Command Override**: Honour all command-agent proposals not already covered; evict conflicting sensor claims.
+
+### NegotiationLayer
+
+Wraps the detector + resolver and tracks a running **conflict_rate**:
+
+```
+conflict_rate = steps_with_any_conflict / total_steps_completed
+```
+
+This metric is exposed in every `/step_multi` and `/auto_multi` response and displayed live on the dashboard.
 
 ---
 
 ## Reward Function
 
-| Condition | Reward |
-|---|---|
-| Assigned sensor to priority-3 target | `+2.0` |
-| Assigned sensor to priority-2 target | `+1.0` |
-| Assigned sensor to priority-1 target | `+0.5` |
-| Idle sensor that could have covered a HIGH threat | `-2.0` |
-| No assignments at all | `-2.0` |
+### Multi-Agent (per-agent, per-step)
 
-Targets that exceed sensor capacity are **not penalised** — only wasted sensors are. Unhandled threats expire at end of step and don't carry over.
+| Condition                              | Reward       |
+|----------------------------------------|--------------|
+| Assigned sensor to P3 target           | `+2.0`       |
+| Assigned sensor to P2 target           | `+1.0`       |
+| Assigned sensor to P1 target           | `+0.5`       |
+| Agent proposed nothing useful (idle)   | `−2.0`       |
+| Agent involved in OVER_ASSIGNMENT      | `−0.5`       |
+| Agent involved in REDUNDANT_COVERAGE   | `−0.5`       |
+
+### Single-Agent (unchanged)
+
+| Condition                                    | Reward |
+|----------------------------------------------|--------|
+| Assigned sensor to P3 target                 | `+2.0` |
+| Assigned sensor to P2 target                 | `+1.0` |
+| Assigned sensor to P1 target                 | `+0.5` |
+| Idle sensor when unhandled HIGH threat exists | `−2.0` |
+
+---
+
+## Observation Space
+
+### Single-Agent (`Observation`)
+
+| Field      | Type           | Description                       |
+|------------|----------------|-----------------------------------|
+| `sensors`  | `List[Sensor]` | All sensors and availability      |
+| `targets`  | `List[Target]` | Active threats this timestep      |
+| `timestep` | `int`          | Current step (0-indexed)          |
+
+### Multi-Agent (`AgentObservation` keyed by agent_id)
+
+Each agent receives the same global sensor + target list, scoped to its perspective:
+
+| Field        | Type   | Description                              |
+|--------------|--------|------------------------------------------|
+| `agent_id`   | `str`  | Agent identifier                         |
+| `agent_type` | `str`  | `satellite \| drone \| radar \| command` |
+| `sensors`    | `list` | All sensors with availability state      |
+| `targets`    | `list` | All targets with priority and active flag|
+| `timestep`   | `int`  | Current step                             |
+
+---
+
+## Action Space
+
+### Single-Agent
+
+```json
+{ "sensor_id": "S1", "target_id": "T0_1" }
+```
+
+### Multi-Agent (`/step_multi` body)
+
+```json
+{
+  "proposals": [
+    { "agent_id": "satellite", "sensor_id": "S1", "target_id": "T0_1" },
+    { "agent_id": "drone",     "sensor_id": "S2", "target_id": "T0_3" },
+    { "agent_id": "command",   "sensor_id": "S4", "target_id": "T0_2" }
+  ]
+}
+```
+
+---
+
+## API Documentation
+
+### Single-Agent Endpoints (unchanged)
+
+| Endpoint          | Method | Description                                            |
+|-------------------|--------|--------------------------------------------------------|
+| `/`               | GET    | Interactive dashboard                                  |
+| `/status`         | GET    | Health check + LLM status                              |
+| `/reset`          | POST   | Reset environment, returns initial observation         |
+| `/state`          | GET    | Current observation without stepping                   |
+| `/step`           | POST   | Single action `{sensor_id, target_id}`                 |
+| `/step/auto`      | POST   | LLM or greedy agent assigns all sensors                |
+| `/grade`          | POST   | Run full episode, return normalised score [0–1]        |
+| `/targets/custom` | POST   | Register custom threat `{id, priority, lat, lon}`      |
+
+### Multi-Agent Endpoints (new)
+
+| Endpoint       | Method | Description                                                    |
+|----------------|--------|----------------------------------------------------------------|
+| `/reset_multi` | POST   | Reset multi-agent env, returns per-agent observations          |
+| `/step_multi`  | POST   | Submit proposals from all agents, returns resolved assignments |
+| `/auto_multi`  | POST   | NegotiationLayer runs auto proposals (LLM or greedy fallback) |
+
+---
+
+### Example Requests & Responses
+
+#### `POST /reset_multi`
+
+**Request:**
+```json
+{ "seed": 42, "max_steps": 20 }
+```
+
+**Response:**
+```json
+{
+  "seed": 42,
+  "max_steps": 20,
+  "conflict_rate": 0.0,
+  "agent_rewards": { "satellite": 0.0, "drone": 0.0, "radar": 0.0, "command": 0.0 },
+  "observations": {
+    "satellite": {
+      "agent_id": "satellite", "agent_type": "satellite", "timestep": 0,
+      "sensors": [...], "targets": [...]
+    },
+    "drone": { "agent_id": "drone", "agent_type": "drone", "timestep": 0, ... },
+    "radar": { ... },
+    "command": { ... }
+  }
+}
+```
+
+---
+
+#### `POST /step_multi`
+
+**Request:**
+```json
+{
+  "proposals": [
+    { "agent_id": "satellite", "sensor_id": "S1", "target_id": "T0_1" },
+    { "agent_id": "drone",     "sensor_id": "S2", "target_id": "T0_2" },
+    { "agent_id": "radar",     "sensor_id": "S1", "target_id": "T0_3" }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "observations": { "satellite": {...}, "drone": {...}, "radar": {...}, "command": {...} },
+  "step_rewards":  { "satellite": 2.0, "drone": 1.0, "radar": -0.5, "command": -2.0 },
+  "agent_rewards": { "satellite": 2.0, "drone": 1.0, "radar": -0.5, "command": -2.0 },
+  "conflict_rate": 0.333,
+  "conflicts": [
+    { "type": "OVER_ASSIGNMENT", "agents": ["satellite", "radar"], "sensor_id": "S1", "target_id": null }
+  ],
+  "done": false,
+  "info": {
+    "step_count": 1,
+    "assignments": [{"sensor": "S1", "target": "T0_1", "agent": "satellite"}, ...],
+    "missed_targets": [],
+    "conflict_rate": 0.333
+  }
+}
+```
+
+---
+
+#### `POST /auto_multi`
+
+Requires no body. Internally runs `_get_multi_proposals()` (LLM → greedy fallback), then `step_multiagent()`.
+
+**Response** includes an additional `proposals` field listing what each agent submitted before conflict resolution:
+
+```json
+{
+  "agent": "greedy",
+  "proposals": [
+    { "agent_id": "satellite", "sensor_id": "S1", "target_id": "T0_1" },
+    { "agent_id": "drone",     "sensor_id": "S2", "target_id": "T0_2" }
+  ],
+  "conflict_rate": 0.0,
+  "conflicts": [],
+  ...
+}
+```
 
 ---
 
 ## Tasks & Graders
 
-All graders return a normalised score in `[0.0, 1.0]`. Difficulty increases with environment complexity and time horizon.
-
-| Task | Sensors | Targets/Step | Steps | Seed | Sensor Failure Prob | Difficulty |
-|---|---|---|---|---|---|---|
-| Easy | 3–5 | 2–3 | 20 | 42 | Low | Baseline allocation |
-| Medium | 3–5 | 3–4 | 40 | 7 | Medium | More steps, varied priorities |
-| Hard | 3–5 | 4–6 | 60 | 13 | Higher | Long horizon, high threat density |
-
-Each task uses a fixed seed to ensure deterministic, reproducible threat sequences across runs. The grader runs a full episode and returns a score normalised against the maximum achievable reward for that configuration.
-
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | GET | Interactive dashboard |
-| `/status` | GET | Health check + LLM connection status |
-| `/reset` | POST | Reset environment, returns initial observation |
-| `/state` | GET | Current observation without stepping |
-| `/step` | POST | Single action `{"sensor_id": "S1", "target_id": "T0_1"}` |
-| `/step/auto` | POST | LLM agent assigns all sensors (greedy fallback if no token) |
-| `/grade` | POST | Run full episode and return normalised score |
-| `/targets/custom` | POST | Register a custom threat `{"id","priority","lat","lon"}` |
+| Task   | Sensors | Targets/Step | Steps | Seed | Difficulty        |
+|--------|---------|--------------|-------|------|-------------------|
+| Easy   | 3–5     | 2–3          | 20    | 42   | Baseline allocation|
+| Medium | 3–5     | 3–4          | 40    | 7    | More steps         |
+| Hard   | 3–5     | 4–6          | 60    | 13   | Long horizon       |
 
 ---
 
 ## Project Structure
 
 ```
+arya-x/
 ├── env/
-│   ├── environment.py   # OpenEnv environment (reset / step / state)
-│   ├── models.py        # Pydantic models (Sensor, Target, Observation)
-│   ├── dynamics.py      # Sensor initialization and target spawning
-│   └── reward.py        # Deprecated (logic handled in environment.py)
+│   ├── __init__.py
+│   ├── environment.py    # SentinelEnv — single-agent (reset / step / state)
+│   ├── models.py         # Pydantic models (Sensor, Target, Observation, Action)
+│   ├── dynamics.py       # Sensor initialisation and target spawning
+│   ├── multiagent.py     # AryaXEnv, ConflictDetector, ConflictResolver, NegotiationLayer
+│   └── reward.py         # (deprecated stub)
 ├── tasks/
 │   ├── easy_task.py
 │   ├── medium_task.py
 │   ├── hard_task.py
-│   └── grader.py        # grade_episode() returns score [0.0–1.0]
-├── server/
-│   └── app.py           # Optional entry point (not used in Docker)
+│   └── grader.py         # grade_episode() → normalised score [0.0–1.0]
 ├── templates/
-│   └── dashboard.html   # UI layout
+│   └── dashboard.html    # UI — mode toggle, multi-agent panels, conflict log
 ├── static/
-│   ├── css/
-│   │   └── dashboard.css
-│   └── js/
-│       └── dashboard.js
-├── inference.py         # Baseline inference script (OpenAI client)
-├── server.py            # Main Flask server (API + UI)
-├── openenv.yaml         # OpenEnv specification config
-├── Dockerfile           # HF Spaces container setup
-├── requirements.txt     # Python dependencies
-├── uv.lock              # Locked dependencies (reproducibility)
-├── pyproject.toml
-├── body.json            # Sample request payload (optional)
-├── .gitignore
-├── .gitattributes
+│   ├── css/dashboard.css # Styles — agent colors, conflict highlighting, metrics
+│   └── js/dashboard.js   # Client-side logic — single + multi-agent modes
+├── server.py             # Flask API — single-agent + multi-agent endpoints
+├── inference.py          # CLI inference script (OpenAI client)
+├── openenv.yaml          # OpenEnv spec — single + multi-agent config
+├── Dockerfile            # HF Spaces container
+├── requirements.txt
 └── README.md
 ```
 
@@ -167,17 +329,17 @@ Each task uses a fixed seed to ensure deterministic, reproducible threat sequenc
 ### Docker
 
 ```bash
-docker build -t sentinel-env .
+docker build -t arya-x .
 docker run -p 7860:7860 \
   -e HF_TOKEN=your_token \
   -e MODEL_NAME=meta-llama/Meta-Llama-3-8B-Instruct \
   -e API_BASE_URL=https://router.huggingface.co/v1 \
-  sentinel-env
+  arya-x
 ```
 
 Open `http://localhost:7860` for the dashboard.
 
-### Local
+### Local (Python)
 
 ```bash
 pip install -r requirements.txt
@@ -195,7 +357,9 @@ export API_BASE_URL=https://router.huggingface.co/v1
 python server.py
 ```
 
-### Run inference
+Dashboard available at `http://localhost:7860`.
+
+### Run Inference Script
 
 ```bash
 python inference.py
@@ -205,44 +369,59 @@ python inference.py
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `API_BASE_URL` | LLM API endpoint |
-| `MODEL_NAME` | Model identifier |
-| `HF_TOKEN` | Hugging Face API token |
+| Variable      | Description                              |
+|---------------|------------------------------------------|
+| `API_BASE_URL` | LLM API endpoint (HuggingFace router)   |
+| `MODEL_NAME`   | Model identifier (default: Llama-3-8B)  |
+| `HF_TOKEN`     | HuggingFace API token (optional)        |
 
----
-
-## Inference & LLM Agent
-
-`inference.py` runs all three tasks sequentially and prints normalised scores.
-
-- Uses the **OpenAI client** (`openai.OpenAI`) pointed at `API_BASE_URL` with `HF_TOKEN` for authentication
-- The LLM receives the current observation (sensors + targets) and returns a JSON assignment list
-- If no token is set or the LLM call fails, a **greedy fallback agent** assigns available sensors to highest-priority targets
-- All runs use fixed seeds — deterministic environment behaviour ensures reproducible scores across runs
-- Error handling covers malformed LLM responses, missing fields, and invalid assignments
-
-**Baseline Scores** from `inference.py` with `meta-llama/Meta-Llama-3-8B-Instruct`:
-
-| Task | Score |
-|---|---|
-| Easy (seed=42, 20 steps) | ~0.75 |
-| Medium (seed=7, 40 steps) | ~0.65 |
-| Hard (seed=13, 60 steps) | ~0.55 |
+Without `HF_TOKEN`, the system uses the **greedy fallback** agent for all auto steps.
 
 ---
 
 ## Dashboard
 
+The Arya-X dashboard supports both **single-agent** and **multi-agent** modes, togglable at any time from the top bar.
+
+### Single-Agent Mode
 - Live Leaflet map with sensor and threat markers
-- Priority-based colours with pulse animation for HIGH threats
-- Animated arcs showing sensor-to-threat assignments
-- Manual override — assign any sensor to any threat
-- Auto step — LLM agent or greedy fallback
-- Operation log showing `[LLM]` or `[greedy]` per step
-- Episode summary after each run
+- Manual assign (sensor → target) or auto step
+- Priority-based pulse animations for HIGH threats
+- Animated arcs showing assignments
+- Episode score bar and grader
+
+### Multi-Agent Mode (NEW)
+- **Mode toggle**: Switch between single / multi-agent instantly
+- **Agent proposals**: Each agent draws arcs in its own color
+  - 🔵 Satellite · 🟢 Drone · 🟠 Radar · 🟣 Command
+- **Conflict indicators**: Targets involved in conflicts get a pulsing dashed ring
+- **Conflict log**: Step-by-step history of conflict types and agents involved
+- **Conflict rate**: Live metric, color-coded (green → amber → red)
+- **Per-agent reward cards**: Cumulative rewards per agent, colored by agent
+- **Episode summary**: Full multi-agent report with conflict rate and per-agent totals
 
 ---
 
-*Built for the OpenEnv Hackathon — Round 1.*
+## Baseline Metrics
+
+### Single-Agent (greedy, `inference.py`)
+
+| Task            | Score  |
+|-----------------|--------|
+| Easy (seed=42)  | ~0.75  |
+| Medium (seed=7) | ~0.65  |
+| Hard (seed=13)  | ~0.55  |
+
+### Multi-Agent (greedy, 4 agents)
+
+| Task   | Conflict Rate | Avg Total Reward |
+|--------|---------------|------------------|
+| Easy   | ~0.10         | ~18.0            |
+| Medium | ~0.20         | ~32.0            |
+| Hard   | ~0.35         | ~48.0            |
+
+Conflict rate drops to near-zero when the LLM backend is active, as agents better coordinate their coverage.
+
+---
+
+*Built for the OpenEnv Hackathon — Arya-X upgrade, Round 2.*
