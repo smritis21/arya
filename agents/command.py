@@ -108,12 +108,30 @@ class CommandAgent(BaseAgent):
         })
         return proposals
 
-    def issue_override(self, conflict: ConflictRecord) -> Optional[Proposal]:
-        """Called by resolver when conflict persists. Returns a binding override proposal."""
-        target_id = conflict.target_id
+    def issue_override(self, conflict) -> Optional[Proposal]:
+        """Called by resolver when conflict persists. Returns a binding override proposal.
+        Works with interaction.conflict.ConflictRecord (involved_targets/involved_agents)
+        and env.models.ConflictRecord (target_id/agents_involved).
+        """
+        # Resolve target_id from whichever schema is present
+        involved_targets = getattr(conflict, "involved_targets", None)
+        target_id = (
+            involved_targets[0]
+            if involved_targets
+            else getattr(conflict, "target_id", None)
+        )
+        if target_id is None:
+            return None
+
         target = next((t for t in self._active_targets() if t.id == target_id), None)
         if target is None:
             return None
+
+        # Resolve involved agents from whichever schema is present
+        involved = (
+            getattr(conflict, "involved_agents", None)
+            or getattr(conflict, "agents_involved", [])
+        )
 
         used_sensors = {p.sensor_id for p in self._all_proposals}
         free_sensor = next(
@@ -121,8 +139,6 @@ class CommandAgent(BaseAgent):
         )
 
         if free_sensor is None:
-            # Pick the proposal from the first involved agent to re-assign
-            involved = conflict.agents_involved
             override_prop = next(
                 (p for p in self._all_proposals
                  if p.agent_id in involved and p.target_id == target_id),

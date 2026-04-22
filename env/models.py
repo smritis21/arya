@@ -13,6 +13,7 @@ class Target(BaseModel):
     id: str
     priority: int  # 1=low, 2=medium, 3=high
     active: bool
+    type: str = "strategic"  # "strategic" | "kinetic" | "airspace"
 
 
 class Observation(BaseModel):

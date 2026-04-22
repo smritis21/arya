@@ -110,6 +110,7 @@ class CurriculumEngine:
         Called after each episode with the episode's coordination and efficiency scores.
         Returns {"phase": int, "difficulty": float, "action": str}.
         """
+        self.episode_count += 1
         self._score_history.append(coordination_score)
         self._eff_history.append(efficiency_score)
 
@@ -181,10 +182,9 @@ class CurriculumEngine:
     # ── Episode lifecycle ────────────────────────────────────────────
     def reset_episode(self) -> None:
         """
-        Increment episode counter and check for self-play trigger.
-        Call at the start of each episode.
+        Called at the START of each episode to check for self-play triggers.
+        Does NOT increment episode_count — that is done by update() at episode end.
         """
-        self.episode_count += 1
         if self.should_trigger_self_play():
             self._self_play_triggers_count += 1
             logger.info(
