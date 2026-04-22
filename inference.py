@@ -34,6 +34,23 @@ from tasks.easy_task import get_easy_env
 from tasks.medium_task import get_medium_env
 from tasks.hard_task import get_hard_env
 
+from agents.satellite import SatelliteAgent
+from agents.drone import DroneAgent
+from agents.radar import RadarAgent
+from agents.command import CommandAgent
+
+USE_MULTI_AGENT = True
+CAPABILITY_MATRIX = {
+    ("satellite","strategic"):0.95, ("satellite","kinetic"):0.40, ("satellite","airspace"):0.60,
+    ("drone","kinetic"):0.95, ("drone","strategic"):0.30, ("drone","airspace"):0.50,
+    ("radar","airspace"):0.95, ("radar","kinetic"):0.65, ("radar","strategic"):0.45,
+}
+
+sat_agent = SatelliteAgent()
+drone_agent = DroneAgent()
+radar_agent = RadarAgent()
+command_agent = CommandAgent()
+
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
@@ -350,33 +367,52 @@ def run_multi_task(name: str, env: AryaXEnv) -> float:
     print(f"[START] task={name} env=arya-x (multi-agent)", flush=True)
 
     while not done:
-        if _has_adapters:
-            # Use trained specialised agents
-            proposal_objs = _lora_multi_proposals(obs_map)
+        if USE_MULTI_AGENT:
+            sat_agent.observe(obs_map["satellite"])
+            drone_agent.observe(obs_map["drone"])
+            radar_agent.observe(obs_map["radar"])
+            command_agent.observe(obs_map["command"])
+
+            proposal_objs = []
+            proposal_objs += sat_agent.propose()
+            proposal_objs += drone_agent.propose()
+            proposal_objs += radar_agent.propose()
+            proposal_objs += command_agent.propose()
         else:
-            # Fallback to greedy
-            proposal_objs = _greedy_multi_proposals(obs_map)
+            if _has_adapters:
+                proposal_objs = _lora_multi_proposals(obs_map)
+            else:
+                proposal_objs = _greedy_multi_proposals(obs_map)
             
-        proposals_dict = [
-            {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
-             "target_id": p.target_id, "capability_score": 0.5}
-            for p in proposal_objs
-        ]
+        sat_obs = obs_map.get("satellite") or next(iter(obs_map.values()))
+        sensors_list = sat_obs.sensors
+        targets_list = sat_obs.targets
+
+        proposals_raw = []
+        for p in proposal_objs:
+            s_type = next((s.get("type", "unknown") if isinstance(s, dict) else s.type for s in sensors_list if (s.get("id") if isinstance(s, dict) else s.id) == p.sensor_id), "unknown")
+            t_type = next((t.get("type", "strategic") if isinstance(t, dict) else getattr(t, "type", "strategic") for t in targets_list if (t.get("id") if isinstance(t, dict) else t.id) == p.target_id), "strategic")
+            cap_score = CAPABILITY_MATRIX.get((s_type, t_type), 0.5)
+            proposals_raw.append({
+                "agent_id": p.agent_id, 
+                "sensor_id": p.sensor_id,
+                "target_id": p.target_id, 
+                "capability_score": getattr(p, "confidence", cap_score)
+            })
 
         # Build world_state from satellite's (global) observation
-        sat_obs = obs_map.get("satellite") or next(iter(obs_map.values()))
-        assigned_sids = {p["sensor_id"] for p in proposals_dict}
-        idle_sensors  = [s["id"] for s in sat_obs.sensors if s["id"] not in assigned_sids]
+        assigned_sids = {p.sensor_id for p in proposal_objs}
+        idle_sensors  = [(s.get("id") if isinstance(s, dict) else s.id) for s in sensors_list if (s.get("id") if isinstance(s, dict) else s.id) not in assigned_sids]
         world_state = {
-            "sensors":      sat_obs.sensors,
-            "targets":      sat_obs.targets,
+            "sensors":      sensors_list,
+            "targets":      targets_list,
             "idle_sensors": idle_sensors,
             "step":         steps_taken,
-            "proposals":    proposals_dict,
+            "proposals":    proposals_raw,
         }
 
         # Run full NegotiationLayer pipeline
-        neg_result = negotiation.negotiate(proposals_dict, world_state, lambda tied: tied[0])
+        neg_result = negotiation.negotiate(proposals_raw, world_state, lambda tied: tied[0])
 
         # Step env with resolved assignments
         obs_map, step_rewards, done, info = env.step_multiagent(proposal_objs)

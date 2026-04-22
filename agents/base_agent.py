@@ -60,9 +60,11 @@ class BaseAgent(ABC):
     def _available_sensors(self):
         if self._obs is None:
             return []
-        return [s for s in self._obs.sensors if s.available]
+        from env.models import Sensor
+        return [Sensor(**s) if isinstance(s, dict) else s for s in self._obs.sensors if (s.get("available") if isinstance(s, dict) else s.available)]
 
     def _active_targets(self):
         if self._obs is None:
             return []
-        return [t for t in self._obs.targets if t.active]
+        from env.models import Target
+        return [Target(**t) if isinstance(t, dict) else t for t in self._obs.targets if (t.get("active") if isinstance(t, dict) else t.active)]
