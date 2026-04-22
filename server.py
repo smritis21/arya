@@ -12,6 +12,12 @@ from flask import Flask, request, jsonify, render_template
 from env import SentinelEnv
 from env.models import Action
 from env.multiagent import AryaXEnv, Proposal, AGENT_TYPES
+from interaction import NegotiationLayer
+from interaction.reward import RewardEngine
+from agents.satellite import SatelliteAgent
+from agents.drone import DroneAgent
+from agents.radar import RadarAgent
+from agents.command import CommandAgent
 
 app = Flask(__name__)
 
@@ -23,6 +29,19 @@ _target_positions: dict = {}
 # ── Multi-agent env ───────────────────────────────────────────────────────────
 mx_env = AryaXEnv(max_steps=10, seed=42)
 mx_obs = None   # Dict[str, AgentObservation] | None
+_negotiation  = NegotiationLayer()
+_reward_eng   = RewardEngine()
+
+sat_agent = SatelliteAgent()
+drone_agent = DroneAgent()
+radar_agent = RadarAgent()
+command_agent = CommandAgent()
+
+CAPABILITY_MATRIX = {
+    ("satellite","strategic"):0.95, ("satellite","kinetic"):0.40, ("satellite","airspace"):0.60,
+    ("drone","kinetic"):0.95, ("drone","strategic"):0.30, ("drone","airspace"):0.50,
+    ("radar","airspace"):0.95, ("radar","kinetic"):0.65, ("radar","strategic"):0.45,
+}
 
 # ── LLM client (optional) ─────────────────────────────────────────────────────
 _llm_client = None
@@ -89,7 +108,7 @@ def init_local_models():
         _has_adapters = False
 
 # Run local init synchronously before requests
-print("\\nInitializing Environment and Models...")
+print("\nInitializing Environment and Models...")
 init_local_models()
 
 if HF_TOKEN and not _has_adapters:
@@ -105,11 +124,11 @@ elif not _has_adapters:
 
 # ── Single-agent helpers (unchanged) ─────────────────────────────────────────
 def _build_prompt(observation) -> str:
-    sensors = "\\n".join(
+    sensors = "\n".join(
         f"  - id={s.id} type={s.type} range={s.range}km available={s.available}"
         for s in observation.sensors if s.available
     )
-    targets = "\\n".join(
+    targets = "\n".join(
         f"  - id={t.id} priority={t.priority} active={t.active}"
         for t in observation.targets if t.active
     )
@@ -186,33 +205,29 @@ def _get_actions(observation) -> tuple[list[Action], str]:
 
 # ── Multi-agent helpers ───────────────────────────────────────────────────────
 def _build_multi_prompt(agent_id: str, agent_obs) -> str:
-    sensors = "\\n".join(
+    sensors = "\n".join(
         f"  - id={s['id']} type={s['type']} range={s['range']}km available={s['available']}"
         for s in agent_obs.sensors if s["available"]
     )
-    targets = "\\n".join(
+    targets = "\n".join(
         f"  - id={t['id']} priority={t['priority']} active={t['active']}"
         for t in agent_obs.targets if t["active"]
     )
-    if not my_sensors:
-        return ""
-    sensor_ids = [s['id'] for s in my_sensors]
-    target_ids = [t['id'] for t in agent_obs.targets if t['active']]
-    return f"""You are the {agent_id} agent. Assign ONLY your sensors to threats.
-Your sensors: {sensor_ids}
-Active threat IDs: {target_ids}
-Priority 3=HIGH, 2=MED, 1=LOW. Cover HIGH first. Each sensor to a DIFFERENT target.
+    return f"""You are the {agent_id} agent in a multi-agent ISR system.
+Propose assignments for sensors you are responsible for.
+Priority 3=HIGH, 2=MED, 1=LOW. Cover HIGH threats first.
 
 Timestep: {agent_obs.timestep}
+Your agent type: {agent_id}
 
-Your Sensors:
+Available Sensors:
 {sensors}
 
 Active Threats:
 {targets}
 
-Respond ONLY with a JSON array using ONLY the sensor IDs and target IDs listed above:
-[{{"sensor_id": "{sensor_ids[0]}", "target_id": "{target_ids[0] if target_ids else 'T0_1'}"}}]
+Respond ONLY with a JSON array:
+[{{"sensor_id": "S1", "target_id": "T0_1"}}]
 """
 
 
@@ -250,7 +265,7 @@ def _lora_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
     for agent_id in AGENT_TYPES:
         agent_obs = agent_obs_map[agent_id]
         prompt = _build_multi_prompt(agent_id, agent_obs)
-        chat_prompt = f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\\n\\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n"
+        chat_prompt = f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
         
         try:
             short_id = AGENT_ID_MAP[agent_id]
@@ -284,10 +299,8 @@ def _lora_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
 
 def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
     """Build proposals from all agents. Returns (proposals, source)."""
-    import sys
     proposals: list[Proposal] = []
     used_sensors: set = set()
-    print(f"[_get_multi_proposals] called, llm_client={_llm_client is not None}", flush=True)
 
     if _has_adapters:
         return _lora_multi_proposals(agent_obs_map)
@@ -297,9 +310,6 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
             for agent_id in AGENT_TYPES:
                 agent_obs = agent_obs_map[agent_id]
                 prompt = _build_multi_prompt(agent_id, agent_obs)
-                if not prompt:
-                    continue
-                print(f"[LLM multi] calling LLM for {agent_id}", flush=True)
                 response = _llm_client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[{"role": "user", "content": prompt}],
@@ -307,32 +317,23 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
                     temperature=0.0
                 )
                 raw = response.choices[0].message.content.strip()
-                print(f"[LLM multi] {agent_id} response: {raw[:200]}", flush=True)
                 start, end = raw.find("["), raw.rfind("]") + 1
-                if start == -1 or end == 0:
-                    print(f"[LLM multi] {agent_id} no JSON array found", flush=True)
-                    continue
                 items = json.loads(raw[start:end])
-                valid_sensors = {
-                    s["id"] for s in agent_obs.sensors
-                    if s["available"] and (agent_id == "command" or s["type"] == agent_id)
-                }
+                valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"]}
                 valid_targets = {t["id"] for t in agent_obs.targets if t["active"]}
                 for item in items:
                     sid, tid = item.get("sensor_id"), item.get("target_id")
-                    if sid in valid_sensors and tid in valid_targets and sid not in used_sensors:
+                    if sid in valid_sensors and tid in valid_targets:
                         proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
                         used_sensors.add(sid)
             if proposals:
-                print(f"[LLM multi] Generated {len(proposals)} proposals", flush=True)
                 return proposals, "llm"
-            print("[LLM multi] No valid proposals, falling back to greedy", flush=True)
         except Exception as e:
-            print(f"[LLM multi] Error: {e}. Falling back to greedy.", flush=True)
+            print(f"[LLM multi] Error: {e}. Falling back to greedy.")
 
-    # Greedy fallback — partition both sensors and targets across agents
+    # Greedy fallback — agents claim sensors by type
     used_sensors = set()
-    used_targets: set = set()
+    used_targets = set()
     for agent_id in AGENT_TYPES:
         agent_obs = agent_obs_map[agent_id]
         for p in _greedy_proposals(agent_id, agent_obs, used_sensors, used_targets):
@@ -467,6 +468,8 @@ def reset_multi():
     mx_env.seed      = seed
     mx_env.max_steps = max_steps
     mx_obs = mx_env.reset()
+    _negotiation.reset()
+    _reward_eng.reset()
     return jsonify({
         "seed":            seed,
         "max_steps":       max_steps,
@@ -495,40 +498,140 @@ def step_multi():
         if p.get("agent_id") and p.get("sensor_id") and p.get("target_id")
     ]
 
-    # Step env with proposals — env runs negotiation internally
+    # Build world_state from satellite observation
+    sat_obs = mx_obs.get("satellite") or next(iter(mx_obs.values()))
+    sensors_dict  = sat_obs.sensors
+    targets_dict  = sat_obs.targets
+    
+    proposals_raw = []
+    for p in proposals:
+        sensor_type = next((s["type"] for s in sensors_dict if s["id"] == p.sensor_id), "unknown")
+        target_type = next((t.get("type", "strategic") for t in targets_dict if t["id"] == p.target_id), "strategic")
+        cap_score = CAPABILITY_MATRIX.get((sensor_type, target_type), 0.5)
+        proposals_raw.append({
+            "agent_id": p.agent_id, 
+            "sensor_id": p.sensor_id,
+            "target_id": p.target_id, 
+            "capability_score": getattr(p, "confidence", cap_score)
+        })
+
+    assigned_sids = {p.sensor_id for p in proposals}
+    idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
+    world_state = {
+        "sensors":      sensors_dict,
+        "targets":      targets_dict,
+        "idle_sensors": idle_sensors,
+        "step":         sat_obs.timestep,
+        "proposals":    proposals_raw,
+    }
+
+    # Run NegotiationLayer (interaction/ package)
+    neg_result = _negotiation.negotiate(
+        proposals_raw, world_state, lambda tied: tied[0]
+    )
+
+    # Step env with resolved proposals
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
-    # Extract conflict info from env's internal negotiation layer
-    conflict_rate = mx_env.negotiation.get_conflict_rate()
-    conflicts = info.get("conflicts", [])
+    # Compute per-agent rewards via RewardEngine
+    per_agent_rewards = _reward_eng.compute_step_reward(
+        neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
+    )
+
+    # Build conflict list from neg_result
+    conflicts = [
+        {
+            "type":      str(c.conflict_type),
+            "agents":    c.involved_agents,
+            "sensor_id": c.involved_sensors[0] if c.involved_sensors else None,
+            "target_id": c.involved_targets[0] if c.involved_targets else None,
+        }
+        for c in neg_result.conflicts_detected
+    ]
+    conflict_rate = _negotiation.get_conflict_rate()
 
     return jsonify({
         "observations":      {k: v.to_dict() for k, v in mx_obs.items()},
         "step_rewards":      step_rewards,
-        "per_agent_rewards": dict(mx_env._agent_rewards),
+        "per_agent_rewards": per_agent_rewards,
         "done":              done,
         "info":              info,
         "conflict_rate":     round(conflict_rate, 4),
         "conflicts":         conflicts,
-        "override_invoked":  False,
+        "override_invoked":  neg_result.override_invoked,
     })
 
 
 @app.post("/auto_multi")
 def auto_multi():
     global mx_obs
-    print(f"[auto_multi] called, mx_obs is None: {mx_obs is None}", flush=True)
     if mx_obs is None:
         return jsonify({"error": "Call /reset_multi first"}), 400
 
-    proposals, source = _get_multi_proposals(mx_obs)
+    sat_agent.observe(mx_obs["satellite"])
+    drone_agent.observe(mx_obs["drone"])
+    radar_agent.observe(mx_obs["radar"])
+    command_agent.observe(mx_obs["command"])
 
-    # Step env with proposals — env runs negotiation internally
+    proposals = []
+    proposals += sat_agent.propose()
+    proposals += drone_agent.propose()
+    proposals += radar_agent.propose()
+    proposals += command_agent.propose()
+
+    source = "multi-agent"
+
+    # Build world_state from satellite observation
+    sat_obs = mx_obs.get("satellite") or next(iter(mx_obs.values()))
+    sensors_dict  = sat_obs.sensors
+    targets_dict  = sat_obs.targets
+    
+    proposals_raw = []
+    for p in proposals:
+        sensor_type = next((s["type"] for s in sensors_dict if s["id"] == p.sensor_id), "unknown")
+        target_type = next((t.get("type", "strategic") for t in targets_dict if t["id"] == p.target_id), "strategic")
+        cap_score = CAPABILITY_MATRIX.get((sensor_type, target_type), 0.5)
+        proposals_raw.append({
+            "agent_id": p.agent_id, 
+            "sensor_id": p.sensor_id,
+            "target_id": p.target_id, 
+            "capability_score": getattr(p, "confidence", cap_score)
+        })
+
+    assigned_sids = {p.sensor_id for p in proposals}
+    idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
+    world_state = {
+        "sensors":      sensors_dict,
+        "targets":      targets_dict,
+        "idle_sensors": idle_sensors,
+        "step":         sat_obs.timestep,
+        "proposals":    proposals_raw,
+    }
+
+    # Run NegotiationLayer (interaction/ package)
+    neg_result = _negotiation.negotiate(
+        proposals_raw, world_state, lambda tied: tied[0]
+    )
+
+    # Step env with resolved proposals (neg_result.final_assignments already validated)
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
-    # Extract conflict info from env's internal negotiation layer
-    conflict_rate = mx_env.negotiation.get_conflict_rate()
-    conflicts = info.get("conflicts", [])
+    # Compute per-agent rewards via RewardEngine
+    per_agent_rewards = _reward_eng.compute_step_reward(
+        neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
+    )
+
+    # Build conflict list from neg_result
+    conflicts = [
+        {
+            "type":      str(c.conflict_type),
+            "agents":    c.involved_agents,
+            "sensor_id": c.involved_sensors[0] if c.involved_sensors else None,
+            "target_id": c.involved_targets[0] if c.involved_targets else None,
+        }
+        for c in neg_result.conflicts_detected
+    ]
+    conflict_rate = _negotiation.get_conflict_rate()
 
     return jsonify({
         "proposals":         [{"agent_id": p.agent_id, "sensor_id": p.sensor_id,
@@ -536,12 +639,12 @@ def auto_multi():
         "agent":             source,
         "observations":      {k: v.to_dict() for k, v in mx_obs.items()},
         "step_rewards":      step_rewards,
-        "per_agent_rewards": dict(mx_env._agent_rewards),
+        "per_agent_rewards": per_agent_rewards,
         "done":              done,
         "info":              info,
         "conflict_rate":     round(conflict_rate, 4),
         "conflicts":         conflicts,
-        "override_invoked":  False,
+        "override_invoked":  neg_result.override_invoked,
     })
 
 
@@ -553,7 +656,5 @@ def ui():
 
 
 if __name__ == "__main__":
-    import logging
-    logging.basicConfig(level=logging.INFO)
     port = int(os.environ.get("PORT", 7860))
-    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)

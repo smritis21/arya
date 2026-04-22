@@ -27,6 +27,11 @@ class AgentObservation:
     targets: List[dict]
     timestep: int
     agent_type: str
+    conflict_history: List[dict] = None
+
+    def __post_init__(self):
+        if self.conflict_history is None:
+            self.conflict_history = []
 
     def to_dict(self) -> dict:
         return {
@@ -35,6 +40,7 @@ class AgentObservation:
             "sensors":    self.sensors,
             "targets":    self.targets,
             "timestep":   self.timestep,
+            "conflict_history": self.conflict_history,
         }
 
 
@@ -132,11 +138,23 @@ class AryaXEnv:
         # Build world_state for interaction/ pipeline
         sensors_dict  = [s.model_dump() for s in self.sensors]
         targets_dict  = [t.model_dump() for t in self.targets]
-        proposals_raw = [
-            {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
-             "target_id": p.target_id, "capability_score": 0.5}
-            for p in proposals
-        ]
+        CAPABILITY_MATRIX = {
+            ("satellite","strategic"):0.95, ("satellite","kinetic"):0.40, ("satellite","airspace"):0.60,
+            ("drone","kinetic"):0.95, ("drone","strategic"):0.30, ("drone","airspace"):0.50,
+            ("radar","airspace"):0.95, ("radar","kinetic"):0.65, ("radar","strategic"):0.45,
+        }
+        
+        proposals_raw = []
+        for p in proposals:
+            sensor_type = next((getattr(s, "type", "unknown") for s in self.sensors if s.id == p.sensor_id), "unknown")
+            target_type = next((getattr(t, "type", "strategic") for t in self.targets if t.id == p.target_id), "strategic")
+            cap_score = CAPABILITY_MATRIX.get((sensor_type, target_type), 0.5)
+            proposals_raw.append({
+                "agent_id": p.agent_id, 
+                "sensor_id": p.sensor_id,
+                "target_id": p.target_id, 
+                "capability_score": cap_score
+            })
         assigned_sids = {p.sensor_id for p in proposals}
         idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
         world_state = {
