@@ -10,7 +10,9 @@ import random as _random
 from flask import Flask, request, jsonify, render_template
 from env import SentinelEnv
 from env.models import Action
-from env.multiagent import AryaXEnv, Proposal, NegotiationLayer, AGENT_TYPES
+from env.multiagent import AryaXEnv, Proposal, AGENT_TYPES
+from interaction import NegotiationLayer
+from interaction.reward import RewardEngine
 
 app = Flask(__name__)
 
