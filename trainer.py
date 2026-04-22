@@ -540,6 +540,10 @@ class ARYAXTrainer:
                     completions=list(responses),
                     rewards=advantages,
                 )
+                print(
+                    f"[GRPO] GRPOTrainer.step() executed for {agent_id}: "
+                    f"{len(rewards_arr)} samples, mean_advantage={sum(advantages)/max(len(advantages),1):.3f}"
+                )
                 logger.debug(
                     "GRPO update for %s: %d samples, max_advantage=%.3f",
                     agent_id, len(rewards_arr), max(advantages, default=0.0),
@@ -603,3 +607,40 @@ class ARYAXTrainer:
                 logger.warning("HuggingFace push failed: %s", exc)
 
         logger.info("Checkpoint saved to: %s", ckpt_path)
+
+
+if __name__ == "__main__":
+    import argparse
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)s  %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    parser = argparse.ArgumentParser(description="ARYA-X GRPO Trainer")
+    parser.add_argument("--episodes", type=int, default=100, help="Number of training episodes")
+    parser.add_argument("--batch",    type=int, default=4,   help="Batch size")
+    parser.add_argument("--eval-every", type=int, default=25, help="Eval interval (episodes)")
+    parser.add_argument("--model",    type=str, default="unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit")
+    parser.add_argument("--wandb",    action="store_true", help="Enable W&B logging")
+    args = parser.parse_args()
+
+    print(f"\n{'='*60}")
+    print(f"  ARYA-X GRPO Training  |  episodes={args.episodes}  batch={args.batch}")
+    print(f"  TRL available : {_TRL_AVAILABLE}")
+    print(f"  HF  available : {_HF_AVAILABLE}")
+    print(f"  PEFT available: {_PEFT_AVAILABLE}")
+    print(f"{'='*60}\n")
+
+    trainer = ARYAXTrainer(
+        model_name=args.model,
+        num_episodes=args.episodes,
+        batch_size=args.batch,
+        eval_every=args.eval_every,
+        use_wandb=args.wandb,
+    )
+    final_metrics = trainer.train()
+    print(f"\n{'='*60}")
+    print(f"  Training complete — final metrics:")
+    for k, v in final_metrics.items():
+        print(f"    {k}: {v}")
+    print(f"{'='*60}\n")
