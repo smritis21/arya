@@ -53,11 +53,13 @@ def _cmd_override(tied: list[dict]) -> dict:
 # ── Multi-agent environment ───────────────────────────────────────────────────
 class AryaXEnv:
     def __init__(self, max_steps: int = 10, seed: int = 42,
-                 density_factor: float = 1.0, failure_prob: float = 0.0):
-        self.max_steps      = max_steps
-        self.seed           = seed
-        self.density_factor = density_factor
-        self.failure_prob   = failure_prob
+                 density_factor: float = 1.0, failure_prob: float = 0.0,
+                 conflict_injection: bool = False):
+        self.max_steps        = max_steps
+        self.seed             = seed
+        self.density_factor   = density_factor
+        self.failure_prob     = failure_prob
+        self.conflict_injection = conflict_injection
         self.sensors:    List[Sensor] = []
         self.targets:    List[Target] = []
         self.current_step: int = 0
@@ -174,7 +176,8 @@ class AryaXEnv:
         )
 
         self.current_step += 1
-        self.targets = spawn_targets(step=self.current_step, seed=self.seed)
+        self.targets = spawn_targets(step=self.current_step, seed=self.seed,
+                                      conflict_injection=self.conflict_injection)
         for s in self.sensors:
             s.available = True
 
