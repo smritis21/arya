@@ -4,6 +4,7 @@ from typing import List
 from env.models import Sensor, Target
 
 SENSOR_TYPES = ["satellite", "drone", "radar"]
+TARGET_TYPES = ["strategic", "kinetic", "airspace"]
 
 
 def initialize_sensors(seed: int = 42) -> List[Sensor]:
@@ -34,7 +35,12 @@ def spawn_targets(
     rng = random.Random((seed * 6364136223846793005 + step) & 0xFFFFFFFFFFFFFFFF)
     count = rng.randint(2, 4)
     targets = [
-        Target(id=f"T{step}_{i+1}", priority=rng.randint(1, 3), active=True)
+        Target(
+            id=f"T{step}_{i+1}",
+            priority=rng.randint(1, 3),
+            active=True,
+            type=rng.choice(TARGET_TYPES),
+        )
         for i in range(count)
     ]
 
@@ -47,12 +53,17 @@ def spawn_targets(
         if injected:
             # Elevate existing target to P3
             targets = [
-                Target(id=t.id, priority=3 if t.id == overlap_id else t.priority, active=t.active)
+                Target(
+                    id=t.id,
+                    priority=3 if t.id == overlap_id else t.priority,
+                    active=t.active,
+                    type=t.type,
+                )
                 for t in targets
             ]
         else:
             # Prepend new P3 target in the overlap zone
-            targets = [Target(id=overlap_id, priority=3, active=True)] + targets
+            targets = [Target(id=overlap_id, priority=3, active=True, type=rng.choice(TARGET_TYPES))] + targets
 
     return targets
 
@@ -69,7 +80,12 @@ def spawn_targets_stochastic(step: int, seed: int = 42, density_factor: float = 
         p *= rng.random()
     count = max(1, k - 1)
     return [
-        Target(id=f"T{step}_{i+1}", priority=rng.randint(1, 3), active=True)
+        Target(
+            id=f"T{step}_{i+1}",
+            priority=rng.randint(1, 3),
+            active=True,
+            type=rng.choice(TARGET_TYPES),
+        )
         for i in range(count)
     ]
 

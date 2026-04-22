@@ -252,14 +252,11 @@ for ep in range(1, NUM_EPISODES + 1):
     if grpo_trainer is not None and proposals:
         queries   = [json.dumps({"sensors": env_state["sensors"], "step": ep}) for _ in proposals]
         responses = [json.dumps(p) for p in proposals]
-        try:
-            grpo_trainer.step(
-                queries=queries,
-                completions=responses,
-                rewards=[ep_reward / max(len(proposals), 1)] * len(proposals),
-            )
-        except Exception as _e:
-            pass  # graceful degradation if TRL API differs
+        grpo_trainer.step(
+            queries=queries,
+            responses=responses,
+            rewards=[ep_reward / max(len(proposals), 1)] * len(proposals),
+        )
 
     if ep % 5 == 0 or ep == 1:
         print(

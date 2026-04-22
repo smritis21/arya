@@ -306,6 +306,7 @@ class ARYAXTrainer:
                 seed=ep_seed,
                 density_factor=1.5 + self.curriculum.difficulty_level * 2.5,
                 failure_prob=cfg["sensor_failure_prob"],
+                conflict_injection=cfg["conflict_injection"],
             )
             # ── PARTIAL OBSERVABILITY: use AryaXEnv.reset() → per-agent obs ──
             obs_map = env.reset()   # Dict[agent_id → AgentObservation (dataclass)]
@@ -537,7 +538,7 @@ class ARYAXTrainer:
             try:
                 self._grpo_trainer.step(
                     queries=list(queries),
-                    completions=list(responses),
+                    responses=list(responses),
                     rewards=advantages,
                 )
                 logger.debug(

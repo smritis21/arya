@@ -110,6 +110,7 @@ class CurriculumEngine:
         Called after each episode with the episode's coordination and efficiency scores.
         Returns {"phase": int, "difficulty": float, "action": str}.
         """
+        self.episode_count += 1
         self._score_history.append(coordination_score)
         self._eff_history.append(efficiency_score)
 
