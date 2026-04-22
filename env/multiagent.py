@@ -2,18 +2,21 @@
 Arya-X Multi-Agent Environment
 Agents: satellite, drone, radar, command
 Each agent proposes assignments; ConflictResolver arbitrates; NegotiationLayer coordinates.
+Uses canonical interaction/ package for conflict detection, resolution, and negotiation.
 """
 import random
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from env.models import Sensor, Target, Action
 from env.dynamics import initialize_sensors, spawn_targets
+from interaction import NegotiationLayer
+from interaction.reward import RewardEngine
 
 # ── Agent types ───────────────────────────────────────────────────────────────
 AGENT_TYPES = ["satellite", "drone", "radar", "command"]
 
-PRIORITY_REWARD = {3: 2.0, 2: 1.0, 1: 0.5}
-IDLE_PENALTY    = -2.0
+PRIORITY_REWARD  = {3: 2.0, 2: 1.0, 1: 0.5}
+IDLE_PENALTY     = -2.0
 CONFLICT_PENALTY = -0.5
 
 
@@ -42,143 +45,27 @@ class Proposal:
     target_id: str
 
 
-# ── Conflict types ────────────────────────────────────────────────────────────
-REDUNDANT_COVERAGE  = "REDUNDANT_COVERAGE"   # two agents assign same target
-OVER_ASSIGNMENT     = "OVER_ASSIGNMENT"       # same sensor assigned by two agents
-MISSED_PRIORITY_3   = "MISSED_PRIORITY_3"    # high-priority target left uncovered
-FORCED_ARBITRATION  = "FORCED_ARBITRATION"   # command agent overrides conflict
-
-
-@dataclass
-class Conflict:
-    type: str
-    agents: List[str]
-    sensor_id: Optional[str] = None
-    target_id: Optional[str] = None
-
-
-class ConflictDetector:
-    def detect(self, proposals: List[Proposal], active_targets: List[Target]) -> List[Conflict]:
-        conflicts: List[Conflict] = []
-        sensor_map: Dict[str, List[str]] = {}   # sensor_id → [agent_ids]
-        target_map: Dict[str, List[str]] = {}   # target_id → [agent_ids]
-
-        for p in proposals:
-            sensor_map.setdefault(p.sensor_id, []).append(p.agent_id)
-            target_map.setdefault(p.target_id, []).append(p.agent_id)
-
-        for sid, agents in sensor_map.items():
-            if len(agents) > 1:
-                conflicts.append(Conflict(OVER_ASSIGNMENT, agents, sensor_id=sid))
-
-        for tid, agents in target_map.items():
-            if len(agents) > 1:
-                conflicts.append(Conflict(REDUNDANT_COVERAGE, agents, target_id=tid))
-
-        covered = {p.target_id for p in proposals}
-        for t in active_targets:
-            if t.priority == 3 and t.id not in covered:
-                conflicts.append(Conflict(MISSED_PRIORITY_3, [], target_id=t.id))
-
-        return conflicts
-
-
-class ConflictResolver:
-    """3-pass resolution: Priority → Capability → Command Override."""
-
-    def resolve(
-        self,
-        proposals: List[Proposal],
-        conflicts: List[Conflict],
-        sensors: List[Sensor],
-        targets: List[Target],
-    ) -> List[Proposal]:
-        if not conflicts:
-            return proposals
-
-        # Pass 1 — Priority: keep proposal targeting highest-priority target
-        target_priority = {t.id: t.priority for t in targets}
-        resolved: Dict[str, Proposal] = {}   # sensor_id → winning proposal
-
-        for p in proposals:
-            if p.sensor_id not in resolved:
-                resolved[p.sensor_id] = p
-            else:
-                existing = resolved[p.sensor_id]
-                if target_priority.get(p.target_id, 0) > target_priority.get(existing.target_id, 0):
-                    resolved[p.sensor_id] = p
-
-        # Pass 2 — Capability: prefer sensor type matching target priority
-        sensor_type = {s.id: s.type for s in sensors}
-        capability_order = {"satellite": 3, "drone": 2, "radar": 1}
-        used_targets: set = set()
-        final: List[Proposal] = []
-
-        for p in sorted(resolved.values(),
-                        key=lambda x: (
-                            -target_priority.get(x.target_id, 0),
-                            -capability_order.get(sensor_type.get(x.sensor_id, "radar"), 1)
-                        )):
-            if p.target_id not in used_targets:
-                final.append(p)
-                used_targets.add(p.target_id)
-
-        # Pass 3 — Command Override: if command agent proposed something, honour it
-        command_proposals = [p for p in proposals if p.agent_id == "command"]
-        for cp in command_proposals:
-            already_covered = any(p.target_id == cp.target_id for p in final)
-            if not already_covered:
-                # Replace any conflicting sensor assignment
-                final = [p for p in final if p.sensor_id != cp.sensor_id]
-                final.append(cp)
-
-        return final
-
-
-class NegotiationLayer:
-    """Tracks conflict_rate and coordinates multi-agent proposals."""
-
-    def __init__(self):
-        self.conflict_history: List[List[Conflict]] = []
-        self.conflict_rate: float = 0.0
-
-    def negotiate(
-        self,
-        proposals: List[Proposal],
-        sensors: List[Sensor],
-        targets: List[Target],
-    ) -> Tuple[List[Proposal], List[Conflict]]:
-        detector = ConflictDetector()
-        resolver = ConflictResolver()
-
-        active_targets = [t for t in targets if t.active]
-        conflicts = detector.detect(proposals, active_targets)
-        resolved  = resolver.resolve(proposals, conflicts, sensors, active_targets)
-
-        self.conflict_history.append(conflicts)
-        total_steps = len(self.conflict_history)
-        steps_with_conflict = sum(1 for c in self.conflict_history if c)
-        self.conflict_rate = steps_with_conflict / total_steps if total_steps else 0.0
-
-        return resolved, conflicts
-
-    def reset(self):
-        self.conflict_history = []
-        self.conflict_rate = 0.0
+def _cmd_override(tied: list[dict]) -> dict:
+    """Command agent override: pick proposal with highest capability_score."""
+    return max(tied, key=lambda p: p.get("capability_score", 0.0))
 
 
 # ── Multi-agent environment ───────────────────────────────────────────────────
 class AryaXEnv:
-    def __init__(self, max_steps: int = 10, seed: int = 42):
-        self.max_steps   = max_steps
-        self.seed        = seed
+    def __init__(self, max_steps: int = 10, seed: int = 42,
+                 density_factor: float = 1.0, failure_prob: float = 0.0):
+        self.max_steps      = max_steps
+        self.seed           = seed
+        self.density_factor = density_factor
+        self.failure_prob   = failure_prob
         self.sensors:    List[Sensor] = []
         self.targets:    List[Target] = []
         self.current_step: int = 0
         self._assignments: List[dict] = []
         self._missed:      List[str]  = []
         self.initial_sensor_count: int = 0
-        self.negotiation = NegotiationLayer()
+        self.negotiation    = NegotiationLayer()
+        self.reward_engine  = RewardEngine()
         self._agent_rewards: Dict[str, float] = {a: 0.0 for a in AGENT_TYPES}
 
     def reset(self) -> Dict[str, AgentObservation]:
@@ -190,6 +77,7 @@ class AryaXEnv:
         self.initial_sensor_count = len(self.sensors)
         self._agent_rewards = {a: 0.0 for a in AGENT_TYPES}
         self.negotiation.reset()
+        self.reward_engine.reset()
         return self._build_observations()
 
     def state(self) -> Dict[str, AgentObservation]:
@@ -213,53 +101,72 @@ class AryaXEnv:
         self,
         proposals: List[Proposal],
     ) -> Tuple[Dict[str, AgentObservation], Dict[str, float], bool, dict]:
-        resolved, conflicts = self.negotiation.negotiate(
-            proposals, self.sensors, self.targets
-        )
+        # Build world_state for interaction/ pipeline
+        sensors_dict  = [s.model_dump() for s in self.sensors]
+        targets_dict  = [t.model_dump() for t in self.targets]
+        proposals_raw = [
+            {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
+             "target_id": p.target_id, "capability_score": 0.5}
+            for p in proposals
+        ]
+        assigned_sids = {p.sensor_id for p in proposals}
+        idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
+        world_state = {
+            "sensors":      sensors_dict,
+            "targets":      targets_dict,
+            "idle_sensors": idle_sensors,
+            "step":         self.current_step,
+            "proposals":    proposals_raw,
+        }
 
-        handled_ids:      set = set()
-        used_sensor_ids:  set = set()
+        # Run full negotiation pipeline (interaction/)
+        neg_result = self.negotiation.negotiate(proposals_raw, world_state, _cmd_override)
+        final_assignments = neg_result.final_assignments  # list[{sensor_id, target_id}]
+        conflicts = neg_result.conflicts_detected
+
+        # Build agent_id lookup from proposals
+        sensor_to_agent = {p.sensor_id: p.agent_id for p in proposals}
+
+        handled_ids:     set = set()
+        used_sensor_ids: set = set()
         agent_assignments: Dict[str, List[dict]] = {a: [] for a in AGENT_TYPES}
 
-        for p in resolved:
-            if p.sensor_id in used_sensor_ids or p.target_id in handled_ids:
+        for a in final_assignments:
+            sid, tid = a["sensor_id"], a["target_id"]
+            if sid in used_sensor_ids or tid in handled_ids:
                 continue
-            sensor_ok = any(s.id == p.sensor_id and s.available for s in self.sensors)
-            target_ok = any(t.id == p.target_id and t.active for t in self.targets)
+            sensor_ok = any(s.id == sid and s.available for s in self.sensors)
+            target_ok = any(t.id == tid and t.active for t in self.targets)
             if not sensor_ok or not target_ok:
                 continue
             for s in self.sensors:
-                if s.id == p.sensor_id:
+                if s.id == sid:
                     s.available = False
             for t in self.targets:
-                if t.id == p.target_id:
+                if t.id == tid:
                     t.active = False
-            handled_ids.add(p.target_id)
-            used_sensor_ids.add(p.sensor_id)
-            self._assignments.append({"sensor": p.sensor_id, "target": p.target_id, "agent": p.agent_id})
-            agent_assignments[p.agent_id].append({"sensor_id": p.sensor_id, "target_id": p.target_id})
+            handled_ids.add(tid)
+            used_sensor_ids.add(sid)
+            agent_id = sensor_to_agent.get(sid, "command")
+            self._assignments.append({"sensor": sid, "target": tid, "agent": agent_id})
+            agent_assignments[agent_id].append({"sensor_id": sid, "target_id": tid})
 
-        # Per-agent rewards
-        step_rewards: Dict[str, float] = {a: 0.0 for a in AGENT_TYPES}
-        for p in resolved:
-            if p.target_id in handled_ids:
-                t_obj = next((t for t in self.targets if t.id == p.target_id), None)
-                if t_obj:
-                    step_rewards[p.agent_id] += PRIORITY_REWARD.get(t_obj.priority, 0.0)
-
-        # Idle penalty for agents that proposed nothing useful
-        for agent in AGENT_TYPES:
-            if not agent_assignments[agent]:
-                step_rewards[agent] += IDLE_PENALTY
-
-        # Conflict penalty
-        for c in conflicts:
-            if c.type in (OVER_ASSIGNMENT, REDUNDANT_COVERAGE):
-                for aid in c.agents:
-                    step_rewards[aid] += CONFLICT_PENALTY
+        # Per-agent rewards via RewardEngine
+        committed = [{"sensor_id": sid, "target_id": tid}
+                     for sid, tid in ((a["sensor_id"], a["target_id"]) for a in final_assignments)
+                     if tid in handled_ids]
+        # Rebuild world_state with committed proposals for RewardEngine
+        world_state["proposals"] = [
+            {"agent_id": sensor_to_agent.get(p["sensor_id"], "command"),
+             "sensor_id": p["sensor_id"], "target_id": p["target_id"]}
+            for p in proposals_raw
+        ]
+        step_rewards = self.reward_engine.compute_step_reward(
+            committed, neg_result, world_state, AGENT_TYPES
+        )
 
         for a in AGENT_TYPES:
-            self._agent_rewards[a] += step_rewards[a]
+            self._agent_rewards[a] += step_rewards.get(a, 0.0)
 
         self._missed.extend(
             t.id for t in self.targets
@@ -272,15 +179,22 @@ class AryaXEnv:
             s.available = True
 
         done = self.current_step >= self.max_steps
+        conflict_rate = self.negotiation.get_conflict_rate()
         info = {
-            "assignments":     list(self._assignments),
-            "missed_targets":  list(self._missed),
-            "step_count":      self.current_step,
-            "conflicts":       [{"type": c.type, "agents": c.agents,
-                                 "sensor_id": c.sensor_id, "target_id": c.target_id}
-                                for c in conflicts],
-            "conflict_rate":   round(self.negotiation.conflict_rate, 4),
-            "agent_rewards":   dict(self._agent_rewards),
-            "step_rewards":    dict(step_rewards),
+            "assignments":    list(self._assignments),
+            "missed_targets": list(self._missed),
+            "step_count":     self.current_step,
+            "conflicts": [
+                {
+                    "type":      str(c.conflict_type),
+                    "agents":    c.involved_agents,
+                    "sensor_id": c.involved_sensors[0] if c.involved_sensors else None,
+                    "target_id": c.involved_targets[0] if c.involved_targets else None,
+                }
+                for c in conflicts
+            ],
+            "conflict_rate":  round(conflict_rate, 4),
+            "agent_rewards":  dict(self._agent_rewards),
+            "step_rewards":   dict(step_rewards),
         }
         return self._build_observations(), step_rewards, done, info
