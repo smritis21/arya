@@ -204,9 +204,10 @@ def reward_function(prompts, completions, **kwargs) -> list[float]:
     return rewards
 
 # ── 7. Training constants (defined BEFORE GRPOConfig so they can be referenced) ──
-NUM_EPISODES = 50
-MAX_STEPS    = 20
-G            = 4          # concurrent proposals per step (GRPO group size)
+NUM_EPISODES    = 20    # reduced for fast Colab demo
+MAX_STEPS       = 10    # steps per episode
+G               = 4     # concurrent proposals per step (GRPO group size)
+TRAINING_STEPS  = 30    # hard cap on GRPO gradient steps (keeps demo under 40 min)
 
 # ── 8. GRPOConfig (module-level — always defined, never inside an if block) ──────
 # grpo_cfg is set to None when TRL is unavailable, preventing NameError downstream.
@@ -327,7 +328,7 @@ print("\n✅ Episode collection complete.\n")
 # reward_function() is called automatically by GRPO — do NOT pass rewards manually.
 
 if grpo_trainer is not None and all_prompts:
-    print(f"🚀 Running GRPO training on {len(all_prompts)} samples …")
+    print(f"Running GRPO training on {len(all_prompts)} samples (max {TRAINING_STEPS} steps)...")
     try:
         from datasets import Dataset as HFDataset
 
@@ -335,15 +336,27 @@ if grpo_trainer is not None and all_prompts:
             "prompt":     all_prompts,
             "completion": all_responses,
         })
-        # Override the trainer's dataset with our collected episodes
         grpo_trainer.train_dataset = train_ds
 
-        grpo_trainer.train()   # ← real gradient update via GRPO
-        print("✅ GRPO training complete.")
+        grpo_trainer.train(max_steps=TRAINING_STEPS)   # capped — no 40-hour runs
+        print("GRPO training complete.")
     except Exception as _grpo_train_err:
-        print(f"⚠️  GRPO training failed: {_grpo_train_err}")
+        print(f"GRPO training failed: {_grpo_train_err}")
 else:
-    print("ℹ️  GRPO training skipped (no trainer or no samples).")
+    print("GRPO training skipped (no trainer or no samples).")
+
+# ── Model save ───────────────────────────────────────────────────────
+print("\nSaving model...")
+import os
+os.makedirs("checkpoints/arya_x_lora", exist_ok=True)
+try:
+    if model is not None:
+        model.save_pretrained("checkpoints/arya_x_lora")
+    if tokenizer is not None:
+        tokenizer.save_pretrained("checkpoints/arya_x_lora")
+    print("Model saved to checkpoints/arya_x_lora")
+except Exception as _save_err:
+    print(f"Model save failed: {_save_err}")
 
 # ── 10. Reward & conflict rate curves ────────────────────────────────
 try:
