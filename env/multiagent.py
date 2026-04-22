@@ -8,7 +8,7 @@ import random
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from env.models import Sensor, Target, Action
-from env.dynamics import initialize_sensors, spawn_targets
+from env.dynamics import initialize_sensors, spawn_targets, spawn_targets_stochastic, apply_correlated_failures
 from interaction import NegotiationLayer
 from interaction.reward import RewardEngine
 
@@ -54,12 +54,16 @@ def _cmd_override(tied: list[dict]) -> dict:
 class AryaXEnv:
     def __init__(self, max_steps: int = 10, seed: int = 42,
                  density_factor: float = 1.0, failure_prob: float = 0.0,
-                 conflict_injection: bool = False):
+                 conflict_injection: bool = False,
+                 min_targets: int = 0, max_targets: int = 0):
         self.max_steps        = max_steps
         self.seed             = seed
         self.density_factor   = density_factor
         self.failure_prob     = failure_prob
         self.conflict_injection = conflict_injection
+        # When non-zero, clamp spawned target count to [min_targets, max_targets]
+        self.min_targets      = min_targets
+        self.max_targets      = max_targets
         self.sensors:    List[Sensor] = []
         self.targets:    List[Target] = []
         self.current_step: int = 0
@@ -70,9 +74,31 @@ class AryaXEnv:
         self.reward_engine  = RewardEngine()
         self._agent_rewards: Dict[str, float] = {a: 0.0 for a in AGENT_TYPES}
 
+    def _clamp_targets(self, targets: List[Target]) -> List[Target]:
+        """Enforce min/max target count from curriculum targets_per_step_range."""
+        if self.max_targets > 0 and len(targets) > self.max_targets:
+            targets = targets[:self.max_targets]
+        if self.min_targets > 0 and len(targets) < self.min_targets:
+            # Pad with copies of the highest-priority target
+            base = targets[-1] if targets else Target(id="T_pad_1", priority=1, active=True)
+            while len(targets) < self.min_targets:
+                pad = Target(
+                    id=f"{base.id}_pad{len(targets)}",
+                    priority=base.priority,
+                    active=True,
+                    type=base.type,
+                )
+                targets.append(pad)
+        return targets
+
     def reset(self) -> Dict[str, AgentObservation]:
         self.sensors = initialize_sensors(self.seed)
-        self.targets = spawn_targets(step=0, seed=self.seed)
+        if self.failure_prob > 0.0:
+            rng = random.Random(self.seed)
+            self.sensors = apply_correlated_failures(self.sensors, rng.randint(0, 9999), self.failure_prob)
+        self.targets = self._clamp_targets(
+            spawn_targets_stochastic(step=0, seed=self.seed, density_factor=self.density_factor)
+        )
         self.current_step = 0
         self._assignments = []
         self._missed = []
@@ -176,10 +202,23 @@ class AryaXEnv:
         )
 
         self.current_step += 1
-        self.targets = spawn_targets(step=self.current_step, seed=self.seed,
-                                      conflict_injection=self.conflict_injection)
+        self.targets = self._clamp_targets(spawn_targets_stochastic(
+            step=self.current_step, seed=self.seed, density_factor=self.density_factor
+        ))
+        if self.conflict_injection:
+            # Guarantee at least one P3 target to exercise the conflict pipeline
+            from env.dynamics import spawn_targets as _spawn_det
+            injected = _spawn_det(step=self.current_step, seed=self.seed, conflict_injection=True)
+            p3_ids = {t.id for t in self.targets if t.priority == 3}
+            for t in injected:
+                if t.priority == 3 and t.id not in p3_ids:
+                    self.targets.append(t)
+                    break
         for s in self.sensors:
             s.available = True
+        if self.failure_prob > 0.0:
+            rng = random.Random(self.seed + self.current_step)
+            self.sensors = apply_correlated_failures(self.sensors, rng.randint(0, 9999), self.failure_prob)
 
         done = self.current_step >= self.max_steps
         conflict_rate = self.negotiation.get_conflict_rate()

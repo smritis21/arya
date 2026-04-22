@@ -295,11 +295,15 @@ class ARYAXTrainer:
 
         for episode in range(1, self.num_episodes + 1):
             # ── Phase 1: Episode rollout ──────────────────────────
+            # reset_episode() only checks self-play triggers; episode_count
+            # is incremented once by update() at episode end.
             self.curriculum.reset_episode()
             cfg = self.curriculum.get_scenario_config()
 
             ep_seed = cfg.get("seed_override") or rng.randint(0, 10000)
             conflict_injection = cfg.get("conflict_injection", False)
+            targets_range = cfg.get("targets_per_step_range", (0, 0))
+            freeze_agent = cfg.get("freeze_agent")
 
             env = AryaXEnv(
                 max_steps=cfg["max_steps"],
@@ -307,6 +311,8 @@ class ARYAXTrainer:
                 density_factor=1.5 + self.curriculum.difficulty_level * 2.5,
                 failure_prob=cfg["sensor_failure_prob"],
                 conflict_injection=cfg["conflict_injection"],
+                min_targets=targets_range[0],
+                max_targets=targets_range[1],
             )
             # ── PARTIAL OBSERVABILITY: use AryaXEnv.reset() → per-agent obs ──
             obs_map = env.reset()   # Dict[agent_id → AgentObservation (dataclass)]
@@ -333,11 +339,11 @@ class ARYAXTrainer:
                 targets_list_by_agent: dict[str, list] = {}
 
                 # First pass: satellite, drone, radar observe & propose
+                # Frozen agent (self-play curriculum) skips propose() entirely
                 for canonical_id in ["satellite", "drone", "radar"]:
                     agent = self._agents[canonical_id]
-                    agent_obs = obs_map[canonical_id]  # AgentObservation dataclass
+                    agent_obs = obs_map[canonical_id]
 
-                    # Build models.AgentObservation for the agent's observe() method
                     from env.models import AgentObservation as ModelAgentObs, Sensor as ModelSensor, Target as ModelTarget
                     model_obs = ModelAgentObs(
                         agent_id=canonical_id,
@@ -348,7 +354,13 @@ class ARYAXTrainer:
                         conflict_history=[],
                     )
                     agent.observe(model_obs)
-                    proposals_obj = agent.propose()
+                    # freeze_agent uses short-code (SAT/UAV/RDR); map to canonical
+                    _freeze_map = {"SAT": "satellite", "UAV": "drone", "RDR": "radar"}
+                    frozen_canonical = _freeze_map.get(freeze_agent)
+                    if frozen_canonical == canonical_id:
+                        proposals_obj = []  # frozen — contributes nothing this step
+                    else:
+                        proposals_obj = agent.propose()
                     all_proposals_obj.extend(proposals_obj)
 
                     sensors_list_by_agent[canonical_id] = agent_obs.sensors
@@ -419,14 +431,16 @@ class ARYAXTrainer:
                 for canonical_id in AGENT_TYPES:
                     episode_rewards[canonical_id] += step_rewards.get(canonical_id, 0.0)
 
-                # Update agent conflict history
-                for conflict in neg_result.conflicts_detected:
-                    for canonical_id in AGENT_TYPES:
-                        if canonical_id in (conflict.involved_agents or []):
-                            self._agents[canonical_id].update(
-                                step_rewards.get(canonical_id, 0.0),
-                                []
-                            )
+                # Update agent conflict history with real conflict records
+                for canonical_id in AGENT_TYPES:
+                    agent_conflicts = [
+                        c for c in neg_result.conflicts_detected
+                        if canonical_id in (getattr(c, "involved_agents", []) or [])
+                    ]
+                    self._agents[canonical_id].update(
+                        step_rewards.get(canonical_id, 0.0),
+                        agent_conflicts
+                    )
 
                 # Store GRPO experiences (keyed by short AGENT_IDS for backward compat)
                 for short_id in AGENT_IDS:
@@ -493,6 +507,8 @@ class ARYAXTrainer:
                 "difficulty":         round(curr_update["difficulty"], 3),
                 "phase":              curr_update["phase"],
                 "conflict_injection": conflict_injection,
+                "targets_range":      list(targets_range),
+                "freeze_agent":       freeze_agent,
             })
             # Flush metrics every 10 episodes (avoid losing data on crash)
             if episode % 10 == 0:
@@ -558,7 +574,7 @@ class ARYAXTrainer:
         try:
             from tasks.grader import run_deterministic_eval
             # Pass None since we are using greedy agents, not LLM agents
-            result = run_deterministic_eval(agents=None, verbose=True, mode="single")
+            result = run_deterministic_eval(agents=None, verbose=True, mode="multi")
             conflict_rate      = self.negotiation.get_conflict_rate()
             coordination_score = 1.0 - conflict_rate
             result["conflict_rate"]      = conflict_rate

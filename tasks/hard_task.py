@@ -61,3 +61,8 @@ def get_hard_task():
 def get_hard_env():
     from env import SentinelEnv
     return SentinelEnv(max_steps=HARD_TASK_CONFIG["max_steps"], seed=13, config=HARD_TASK_CONFIG)
+
+
+def get_hard_multi_env():
+    from env.multiagent import AryaXEnv
+    return AryaXEnv(max_steps=HARD_TASK_CONFIG["max_steps"], seed=13, density_factor=4.0, failure_prob=0.15, conflict_injection=True)

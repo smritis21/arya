@@ -11,8 +11,6 @@ from flask import Flask, request, jsonify, render_template
 from env import SentinelEnv
 from env.models import Action
 from env.multiagent import AryaXEnv, Proposal, AGENT_TYPES
-from interaction import NegotiationLayer
-from interaction.reward import RewardEngine
 
 app = Flask(__name__)
 
@@ -22,10 +20,8 @@ obs = None
 _target_positions: dict = {}
 
 # ── Multi-agent env ───────────────────────────────────────────────────────────
-mx_env        = AryaXEnv(max_steps=10, seed=42)
-mx_obs        = None   # Dict[str, AgentObservation] | None
-_negotiation  = NegotiationLayer()
-_reward_eng   = RewardEngine()
+mx_env = AryaXEnv(max_steps=10, seed=42)
+mx_obs = None   # Dict[str, AgentObservation] | None
 
 # ── LLM client (optional) ─────────────────────────────────────────────────────
 _llm_client = None
@@ -369,8 +365,6 @@ def reset_multi():
     mx_env.seed      = seed
     mx_env.max_steps = max_steps
     mx_obs = mx_env.reset()
-    _negotiation.reset()
-    _reward_eng.reset()
     return jsonify({
         "seed":            seed,
         "max_steps":       max_steps,
@@ -399,59 +393,22 @@ def step_multi():
         if p.get("agent_id") and p.get("sensor_id") and p.get("target_id")
     ]
 
-    # Build world_state from satellite observation
-    sat_obs = mx_obs.get("satellite") or next(iter(mx_obs.values()))
-    sensors_dict  = sat_obs.sensors
-    targets_dict  = sat_obs.targets
-    proposals_raw = [
-        {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
-         "target_id": p.target_id, "capability_score": 0.5}
-        for p in proposals
-    ]
-    assigned_sids = {p.sensor_id for p in proposals}
-    idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
-    world_state = {
-        "sensors":      sensors_dict,
-        "targets":      targets_dict,
-        "idle_sensors": idle_sensors,
-        "step":         sat_obs.timestep,
-        "proposals":    proposals_raw,
-    }
-
-    # Run NegotiationLayer (interaction/ package)
-    neg_result = _negotiation.negotiate(
-        proposals_raw, world_state, lambda tied: tied[0]
-    )
-
-    # Step env with resolved proposals
+    # Step env with proposals — env runs negotiation internally
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
-    # Compute per-agent rewards via RewardEngine
-    per_agent_rewards = _reward_eng.compute_step_reward(
-        neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
-    )
-
-    # Build conflict list from neg_result
-    conflicts = [
-        {
-            "type":      str(c.conflict_type),
-            "agents":    c.involved_agents,
-            "sensor_id": c.involved_sensors[0] if c.involved_sensors else None,
-            "target_id": c.involved_targets[0] if c.involved_targets else None,
-        }
-        for c in neg_result.conflicts_detected
-    ]
-    conflict_rate = _negotiation.get_conflict_rate()
+    # Extract conflict info from env's internal negotiation layer
+    conflict_rate = mx_env.negotiation.get_conflict_rate()
+    conflicts = info.get("conflicts", [])
 
     return jsonify({
         "observations":      {k: v.to_dict() for k, v in mx_obs.items()},
         "step_rewards":      step_rewards,
-        "per_agent_rewards": per_agent_rewards,
+        "per_agent_rewards": dict(mx_env._agent_rewards),
         "done":              done,
         "info":              info,
         "conflict_rate":     round(conflict_rate, 4),
         "conflicts":         conflicts,
-        "override_invoked":  neg_result.override_invoked,
+        "override_invoked":  False,
     })
 
 
@@ -464,49 +421,12 @@ def auto_multi():
 
     proposals, source = _get_multi_proposals(mx_obs)
 
-    # Build world_state from satellite observation
-    sat_obs = mx_obs.get("satellite") or next(iter(mx_obs.values()))
-    sensors_dict  = sat_obs.sensors
-    targets_dict  = sat_obs.targets
-    proposals_raw = [
-        {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
-         "target_id": p.target_id, "capability_score": 0.5}
-        for p in proposals
-    ]
-    assigned_sids = {p.sensor_id for p in proposals}
-    idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
-    world_state = {
-        "sensors":      sensors_dict,
-        "targets":      targets_dict,
-        "idle_sensors": idle_sensors,
-        "step":         sat_obs.timestep,
-        "proposals":    proposals_raw,
-    }
-
-    # Run NegotiationLayer (interaction/ package)
-    neg_result = _negotiation.negotiate(
-        proposals_raw, world_state, lambda tied: tied[0]
-    )
-
-    # Step env with resolved proposals (neg_result.final_assignments already validated)
+    # Step env with proposals — env runs negotiation internally
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
-    # Compute per-agent rewards via RewardEngine
-    per_agent_rewards = _reward_eng.compute_step_reward(
-        neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
-    )
-
-    # Build conflict list from neg_result
-    conflicts = [
-        {
-            "type":      str(c.conflict_type),
-            "agents":    c.involved_agents,
-            "sensor_id": c.involved_sensors[0] if c.involved_sensors else None,
-            "target_id": c.involved_targets[0] if c.involved_targets else None,
-        }
-        for c in neg_result.conflicts_detected
-    ]
-    conflict_rate = _negotiation.get_conflict_rate()
+    # Extract conflict info from env's internal negotiation layer
+    conflict_rate = mx_env.negotiation.get_conflict_rate()
+    conflicts = info.get("conflicts", [])
 
     return jsonify({
         "proposals":         [{"agent_id": p.agent_id, "sensor_id": p.sensor_id,
@@ -514,12 +434,12 @@ def auto_multi():
         "agent":             source,
         "observations":      {k: v.to_dict() for k, v in mx_obs.items()},
         "step_rewards":      step_rewards,
-        "per_agent_rewards": per_agent_rewards,
+        "per_agent_rewards": dict(mx_env._agent_rewards),
         "done":              done,
         "info":              info,
         "conflict_rate":     round(conflict_rate, 4),
         "conflicts":         conflicts,
-        "override_invoked":  neg_result.override_invoked,
+        "override_invoked":  False,
     })
 
 
