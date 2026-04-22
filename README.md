@@ -424,4 +424,19 @@ Conflict rate drops to near-zero when the LLM backend is active, as agents bette
 
 ---
 
+## Training Results
+
+The system implements Group Relative Policy Optimization (GRPO) training using parameter-efficient fine-tuning (LoRA) for each specialized agent (Satellite, Drone, Radar, Command).
+
+![Training Rewards and Conflict Rates Curve](./checkpoints/arya_x_lora/reward_curve.png)
+
+Over the multi-phase curriculum training period:
+- **Conflict Rate** decreased drastically from an initial baseline of `~0.30 - 0.45` to `~0.05` organically.
+- **Coordination Score** inversely climbed from `~0.60` up to `0.95`.
+- **Learned Specialization**: The LoRA adapters correctly learned to honor the dynamic bounds of their capability matrices without requiring rigid rule-based constraints at inference time.
+
+The trained LoRA adapters are now loaded dynamically during inference ensuring that the learning improvements translate successfully to the execution pipeline.
+
+---
+
 *Built for the OpenEnv Hackathon — Arya-X upgrade, Round 2.*
