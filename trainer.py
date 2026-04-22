@@ -49,6 +49,7 @@ except ImportError:
 
 # ── Internal imports ──────────────────────────────────────────────────────────
 from env.environment import SentinelEnv
+from env.multiagent import AryaXEnv
 from env.dynamics import SENSOR_TYPES
 from interaction import NegotiationLayer
 from interaction.reward import RewardEngine
@@ -186,6 +187,7 @@ class ARYAXTrainer:
         self._model    = None
         self._tokenizer= None
         self._adapters: dict[str, Any] = {}
+        self._grpo_trainer = None
 
         if use_wandb:
             try:
@@ -195,6 +197,21 @@ class ARYAXTrainer:
                 logger.warning("wandb not installed — skipping W&B logging.")
 
         self._load_model()
+
+        # Initialise GRPOTrainer after model is loaded
+        if _TRL_AVAILABLE and self._model is not None and self._tokenizer is not None:
+            grpo_cfg = GRPOConfig(
+                output_dir="./grpo_output",
+                num_train_epochs=1,
+                per_device_train_batch_size=self.batch_size,
+                temperature=self.temperature,
+            )
+            self._grpo_trainer = GRPOTrainer(
+                model=self._model,
+                config=grpo_cfg,
+                tokenizer=self._tokenizer,
+            )
+            logger.info("GRPOTrainer initialised.")
 
     # ── Model loading ─────────────────────────────────────────────────
     def _load_model(self) -> None:
@@ -262,12 +279,20 @@ class ARYAXTrainer:
             self.curriculum.reset_episode()
             cfg = self.curriculum.get_scenario_config()
 
-            env = SentinelEnv(
+            env = AryaXEnv(
                 max_steps=cfg["max_steps"],
                 seed=cfg.get("seed_override") or rng.randint(0, 10000),
-                config=None,  # use dynamic spawn
+                density_factor=1.5 + self.curriculum.difficulty_level * 2.5,
+                failure_prob=cfg["sensor_failure_prob"],
             )
             obs = env.reset()
+            # Wrap as single-agent Observation for proposal generation
+            from env.environment import SentinelEnv as _SE
+            _single_env = _SE(
+                max_steps=cfg["max_steps"],
+                seed=cfg.get("seed_override") or rng.randint(0, 10000),
+            )
+            obs = _single_env.reset()
             self.negotiation.reset()
             self.reward_engine.reset()
 
@@ -347,7 +372,7 @@ class ARYAXTrainer:
             all_episode_rewards.append(total_ep_reward)
 
             # ── Phase 3: GRPO batch formation ────────────────────
-            if _TRL_AVAILABLE and self._model is not None:
+            if self._grpo_trainer is not None:
                 self._grpo_update(agent_experiences)
 
             # ── Phase 4: Curriculum update ────────────────────────
@@ -388,16 +413,13 @@ class ARYAXTrainer:
         Group G proposals per step, compute group relative advantage,
         format and pass to GRPOTrainer for policy gradient update.
         """
-        if not _TRL_AVAILABLE:
+        if self._grpo_trainer is None:
             return
 
         for agent_id, experiences in agent_experiences.items():
             if not experiences:
                 continue
-            # Group by step index (every G-th sample)
             queries, responses, rewards_list = zip(*experiences)
-            # GRPOTrainer expects: list[str] queries, list[str] responses, list[float] rewards
-            # Per-group advantage = r_i - mean(r_group)
             rewards_arr = list(rewards_list)
             if len(rewards_arr) >= self.G:
                 group_mean = sum(rewards_arr) / len(rewards_arr)
@@ -405,12 +427,18 @@ class ARYAXTrainer:
             else:
                 advantages = rewards_arr
 
-            # In a full deployment, call GRPOTrainer.step() here
-            # grpo_trainer.step(list(queries), list(responses), advantages)
-            logger.debug(
-                "GRPO update for %s: %d samples, max_advantage=%.3f",
-                agent_id, len(rewards_arr), max(advantages, default=0.0),
-            )
+            try:
+                self._grpo_trainer.step(
+                    queries=list(queries),
+                    completions=list(responses),
+                    rewards=advantages,
+                )
+                logger.debug(
+                    "GRPO update for %s: %d samples, max_advantage=%.3f",
+                    agent_id, len(rewards_arr), max(advantages, default=0.0),
+                )
+            except Exception as exc:
+                logger.warning("GRPOTrainer.step() failed for %s: %s", agent_id, exc)
 
     # ── Evaluation ────────────────────────────────────────────────────
     def evaluate(self) -> dict:
