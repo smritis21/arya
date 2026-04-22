@@ -49,15 +49,22 @@ except ImportError:
 
 # ── Internal imports ──────────────────────────────────────────────────────────
 from env.environment import SentinelEnv
-from env.multiagent import AryaXEnv
+from env.multiagent import AryaXEnv, AGENT_TYPES
 from env.dynamics import SENSOR_TYPES
 from interaction import NegotiationLayer
 from interaction.reward import RewardEngine
 from curriculum import CurriculumEngine
 from tasks.grader import grade_episode
+from agents import SatelliteAgent, DroneAgent, RadarAgent, CommandAgent
 
-# Agent IDs
+# Agent IDs (short codes used internally; map to specialised agent classes)
 AGENT_IDS = ["SAT", "UAV", "RDR", "CMD"]
+
+# Map short-code → AryaXEnv agent_id string
+AGENT_ID_MAP = {"SAT": "satellite", "UAV": "drone", "RDR": "radar", "CMD": "command"}
+
+# Metrics export path
+METRICS_LOG_PATH = Path("./logs/training_metrics.json")
 
 # Capability matrix (mirrors conflict.py)
 CAPABILITY_MATRIX: dict[tuple[str, str], float] = {
@@ -184,6 +191,18 @@ class ARYAXTrainer:
         self.checkpoint_dir   = Path("./checkpoints")
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+        # Metrics log directory
+        METRICS_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        self._metrics_log: list[dict] = []
+
+        # Specialised agent instances (deterministic, no LLM)
+        self._agents = {
+            "satellite": SatelliteAgent(),
+            "drone":     DroneAgent(),
+            "radar":     RadarAgent(),
+            "command":   CommandAgent(max_steps=num_episodes),
+        }
+
         self._model    = None
         self._tokenizer= None
         self._adapters: dict[str, Any] = {}
@@ -279,86 +298,147 @@ class ARYAXTrainer:
             self.curriculum.reset_episode()
             cfg = self.curriculum.get_scenario_config()
 
+            ep_seed = cfg.get("seed_override") or rng.randint(0, 10000)
+            conflict_injection = cfg.get("conflict_injection", False)
+
             env = AryaXEnv(
                 max_steps=cfg["max_steps"],
-                seed=cfg.get("seed_override") or rng.randint(0, 10000),
+                seed=ep_seed,
                 density_factor=1.5 + self.curriculum.difficulty_level * 2.5,
                 failure_prob=cfg["sensor_failure_prob"],
             )
-            obs = env.reset()
-            # Wrap as single-agent Observation for proposal generation
-            from env.environment import SentinelEnv as _SE
-            _single_env = _SE(
-                max_steps=cfg["max_steps"],
-                seed=cfg.get("seed_override") or rng.randint(0, 10000),
-            )
-            obs = _single_env.reset()
+            # ── PARTIAL OBSERVABILITY: use AryaXEnv.reset() → per-agent obs ──
+            obs_map = env.reset()   # Dict[agent_id → AgentObservation (dataclass)]
             self.negotiation.reset()
             self.reward_engine.reset()
+
+            # Reset specialised agent episode state
+            for agent in self._agents.values():
+                agent.reset_episode()
 
             # Per-agent experience buffers: list of (obs_text, proposal_text, reward)
             agent_experiences: dict[str, list[tuple[str, str, float]]] = {
                 aid: [] for aid in AGENT_IDS
             }
 
-            episode_rewards: dict[str, float] = {aid: 0.0 for aid in AGENT_IDS}
+            # Accumulate rewards keyed by canonical agent_id string
+            episode_rewards: dict[str, float] = {aid: 0.0 for aid in AGENT_TYPES}
             done = False
 
             while not done:
-                sensors_list = [
-                    {"id": s.id, "type": s.type, "range": s.range, "available": s.available}
-                    for s in obs.sensors
+                # ── Each agent observes ONLY its own partial observation ──
+                all_proposals_obj = []  # env.models.Proposal objects
+                sensors_list_by_agent: dict[str, list] = {}
+                targets_list_by_agent: dict[str, list] = {}
+
+                # First pass: satellite, drone, radar observe & propose
+                for canonical_id in ["satellite", "drone", "radar"]:
+                    agent = self._agents[canonical_id]
+                    agent_obs = obs_map[canonical_id]  # AgentObservation dataclass
+
+                    # Build models.AgentObservation for the agent's observe() method
+                    from env.models import AgentObservation as ModelAgentObs, Sensor as ModelSensor, Target as ModelTarget
+                    model_obs = ModelAgentObs(
+                        agent_id=canonical_id,
+                        agent_type=canonical_id,
+                        sensors=[ModelSensor(**s) for s in agent_obs.sensors],
+                        targets=[ModelTarget(**t) for t in agent_obs.targets],
+                        timestep=agent_obs.timestep,
+                        conflict_history=[],
+                    )
+                    agent.observe(model_obs)
+                    proposals_obj = agent.propose()
+                    all_proposals_obj.extend(proposals_obj)
+
+                    sensors_list_by_agent[canonical_id] = agent_obs.sensors
+                    targets_list_by_agent[canonical_id] = agent_obs.targets
+
+                # Command observes last (sees all other proposals for gap-filling)
+                cmd_agent = self._agents["command"]
+                cmd_obs_raw = obs_map["command"]
+                from env.models import AgentObservation as ModelAgentObs, Sensor as ModelSensor, Target as ModelTarget
+                cmd_model_obs = ModelAgentObs(
+                    agent_id="command",
+                    agent_type="command",
+                    sensors=[ModelSensor(**s) for s in cmd_obs_raw.sensors],
+                    targets=[ModelTarget(**t) for t in cmd_obs_raw.targets],
+                    timestep=cmd_obs_raw.timestep,
+                    conflict_history=[],
+                )
+                cmd_agent.observe(cmd_model_obs, proposals=all_proposals_obj)
+                all_proposals_obj.extend(cmd_agent.propose())
+
+                # Convert to dict format for negotiation layer
+                from env.multiagent import Proposal as EnvProposal
+                final_proposals_dict = [
+                    {
+                        "agent_id":          p.agent_id,
+                        "sensor_id":         p.sensor_id,
+                        "target_id":         p.target_id,
+                        "priority_estimate": p.priority_estimate,
+                        "confidence":        p.confidence,
+                        "capability_score":  p.confidence,  # proxy
+                    }
+                    for p in all_proposals_obj
                 ]
-                targets_list = [
-                    {"id": t.id, "priority": t.priority, "active": t.active, "type": DEFAULT_TARGET_TYPE}
-                    for t in obs.targets
-                ]
 
-                # Each agent generates G proposals (temperature sampling via greedy + noise)
-                all_proposals: list[dict] = []
-                for agent_id in AGENT_IDS:
-                    for _ in range(self.G):
-                        proposal = _greedy_proposal(agent_id, sensors_list, targets_list, rng)
-                        if proposal:
-                            all_proposals.append(proposal)
+                # Build world_state from command's (global) observation
+                sensors_list = cmd_obs_raw.sensors
+                targets_list = cmd_obs_raw.targets
+                assigned_sids = {p["sensor_id"] for p in final_proposals_dict}
+                idle_sensors = [s["id"] for s in sensors_list if s["id"] not in assigned_sids]
+                world_state = {
+                    "sensors":      sensors_list,
+                    "targets":      targets_list,
+                    "idle_sensors": idle_sensors,
+                    "step":         env.current_step,
+                    "proposals":    final_proposals_dict,
+                }
 
-                # Deduplicate to 1 proposal per agent (best by confidence)
-                best_proposals: dict[str, dict] = {}
-                for p in all_proposals:
-                    aid = p["agent_id"]
-                    if aid not in best_proposals or p["confidence"] > best_proposals[aid]["confidence"]:
-                        best_proposals[aid] = p
-                final_proposals = list(best_proposals.values())
-
-                world_state = _build_world_state(obs, env.current_step, final_proposals)
-
-                # Negotiate
+                # Negotiate via interaction/ (unchanged)
                 neg_result = self.negotiation.negotiate(
-                    final_proposals, world_state, _cmd_override
+                    final_proposals_dict, world_state, _cmd_override
                 )
 
-                # Step env
-                env_actions = [
-                    {"sensor_id": a["sensor_id"], "target_id": a["target_id"]}
-                    for a in neg_result.final_assignments
+                # Step multiagent env
+                env_proposals = [
+                    EnvProposal(
+                        agent_id=p["agent_id"],
+                        sensor_id=p["sensor_id"],
+                        target_id=p["target_id"],
+                    )
+                    for p in final_proposals_dict
                 ]
-                obs, env_reward, done, info = env.step_batch(env_actions)
+                obs_map, step_rewards_env, done, info = env.step_multiagent(env_proposals)
 
-                # Compute multi-agent reward
+                # Also compute rewards via RewardEngine for GRPO shaping
                 step_rewards = self.reward_engine.compute_step_reward(
-                    neg_result.final_assignments, neg_result, world_state, AGENT_IDS
+                    neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
                 )
-                for aid, r in step_rewards.items():
-                    episode_rewards[aid] += r
+                for canonical_id in AGENT_TYPES:
+                    episode_rewards[canonical_id] += step_rewards.get(canonical_id, 0.0)
 
-                # Store experiences
-                for aid in AGENT_IDS:
-                    prop = best_proposals.get(aid)
+                # Update agent conflict history
+                for conflict in neg_result.conflicts_detected:
+                    for canonical_id in AGENT_TYPES:
+                        if canonical_id in (conflict.involved_agents or []):
+                            self._agents[canonical_id].update(
+                                step_rewards.get(canonical_id, 0.0),
+                                []
+                            )
+
+                # Store GRPO experiences (keyed by short AGENT_IDS for backward compat)
+                for short_id in AGENT_IDS:
+                    canonical_id = AGENT_ID_MAP[short_id]
+                    obs_text  = json.dumps({"sensors": sensors_list, "targets": targets_list})
+                    prop = next(
+                        (p for p in final_proposals_dict if p["agent_id"] == canonical_id),
+                        None
+                    )
                     if prop:
-                        obs_text  = json.dumps({"sensors": sensors_list, "targets": targets_list})
                         prop_text = json.dumps(prop)
-                        agent_experiences[aid].append(
-                            (obs_text, prop_text, step_rewards.get(aid, 0.0))
+                        agent_experiences[short_id].append(
+                            (obs_text, prop_text, step_rewards.get(canonical_id, 0.0))
                         )
 
             # ── Phase 2: Look-ahead reward shaping ───────────────
@@ -366,7 +446,7 @@ class ARYAXTrainer:
                 self.reward_engine._episode_buffer
             )
             for aid, bonus in lookahead.items():
-                episode_rewards[aid] += bonus
+                episode_rewards[aid] = episode_rewards.get(aid, 0.0) + bonus
 
             total_ep_reward = sum(episode_rewards.values())
             all_episode_rewards.append(total_ep_reward)
@@ -377,32 +457,59 @@ class ARYAXTrainer:
 
             # ── Phase 4: Curriculum update ────────────────────────
             conflict_rate      = self.negotiation.get_conflict_rate()
-            coordination_score = 1.0 - conflict_rate
-            scores             = self.reward_engine.compute_scores(
-                episode_rewards, cfg["max_steps"], len(obs.sensors)
+            coordination_score = round(1.0 - conflict_rate, 4)
+            # obs_map still holds last state; use satellite obs for sensor count
+            last_obs = obs_map.get("satellite") or next(iter(obs_map.values()))
+            sensor_count = len(last_obs.sensors) if last_obs else 1
+            scores = self.reward_engine.compute_scores(
+                episode_rewards, cfg["max_steps"], sensor_count
             )
             curr_update = self.curriculum.update(
                 coordination_score, scores.get("efficiency", 0.0)
             )
 
-            # ── Print progress ────────────────────────────────────
+            # ── Phase 5: Structured training log ─────────────────
             avg_reward = sum(all_episode_rewards[-10:]) / min(10, len(all_episode_rewards))
+            per_agent_fmt = {k: round(v, 3) for k, v in episode_rewards.items()}
             print(
-                f"[Episode {episode}/{self.num_episodes}] "
-                f"coord={coordination_score:.2f} "
-                f"conflict_rate={conflict_rate:.2f} "
-                f"avg_reward={avg_reward:.2f} "
-                f"phase={curr_update['phase']} "
-                f"difficulty={curr_update['difficulty']:.2f}"
+                f"\n[EP {episode}]\n"
+                f"  conflict_rate={conflict_rate:.4f}\n"
+                f"  coordination_score={coordination_score:.4f}\n"
+                f"  rewards={per_agent_fmt}\n"
+                f"  total_reward={round(total_ep_reward, 3)}\n"
+                f"  difficulty={curr_update['difficulty']:.2f}  "
+                f"phase={curr_update['phase']}  "
+                f"avg10={avg_reward:.2f}"
             )
 
-            # ── Phase 5: Eval checkpoint ──────────────────────────
+            # ── Phase 6: JSON metrics export ──────────────────────
+            self._metrics_log.append({
+                "episode":            episode,
+                "conflict_rate":      round(conflict_rate, 4),
+                "coordination_score": round(coordination_score, 4),
+                "reward":             round(total_ep_reward, 4),
+                "per_agent_rewards":  per_agent_fmt,
+                "difficulty":         round(curr_update["difficulty"], 3),
+                "phase":              curr_update["phase"],
+                "conflict_injection": conflict_injection,
+            })
+            # Flush metrics every 10 episodes (avoid losing data on crash)
+            if episode % 10 == 0:
+                with open(METRICS_LOG_PATH, "w") as f:
+                    json.dump(self._metrics_log, f, indent=2)
+
+            # ── Phase 7: Eval checkpoint ──────────────────────────
             if episode % self.eval_every == 0:
                 eval_result = self.evaluate()
                 logger.info("[Eval @ %d] %s", episode, eval_result)
 
             if episode % 500 == 0:
                 self.save_checkpoint(str(self.checkpoint_dir / f"episode_{episode}"))
+
+        # Final metrics flush
+        with open(METRICS_LOG_PATH, "w") as f:
+            json.dump(self._metrics_log, f, indent=2)
+        logger.info("Training metrics saved to %s", METRICS_LOG_PATH)
 
         # Final evaluation
         return self.evaluate()

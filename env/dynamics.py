@@ -14,12 +14,48 @@ def initialize_sensors(seed: int = 42) -> List[Sensor]:
     ]
 
 
-def spawn_targets(step: int, seed: int = 42) -> List[Target]:
+def spawn_targets(
+    step: int,
+    seed: int = 42,
+    conflict_injection: bool = False,
+) -> List[Target]:
+    """
+    Spawn targets for the given step.
+
+    Args:
+        step: Current environment step (used in the RNG seed mix).
+        seed: Episode seed.
+        conflict_injection: If True (curriculum Phase 2+), guarantees at least
+            one priority-3 target that sits in the overlapping coverage zone of
+            >= 2 sensor types (index 1 = drone/radar boundary; index 2 = sat/all
+            zone).  This forces the ConflictDetector to fire, exercising the
+            resolver and NegotiationLayer during training.
+    """
     rng = random.Random((seed * 6364136223846793005 + step) & 0xFFFFFFFFFFFFFFFF)
-    return [
+    count = rng.randint(2, 4)
+    targets = [
         Target(id=f"T{step}_{i+1}", priority=rng.randint(1, 3), active=True)
-        for i in range(rng.randint(2, 4))
+        for i in range(count)
     ]
+
+    if conflict_injection:
+        # Guarantee a P3 target at the boundary overlap zone (index 1).
+        # Index 1 is claimed by both DroneAgent (proximity bias) and
+        # RadarAgent (airspace = odd index), triggering REDUNDANT_COVERAGE.
+        overlap_id = f"T{step}_1"
+        injected = next((t for t in targets if t.id == overlap_id), None)
+        if injected:
+            # Elevate existing target to P3
+            targets = [
+                Target(id=t.id, priority=3 if t.id == overlap_id else t.priority, active=t.active)
+                for t in targets
+            ]
+        else:
+            # Prepend new P3 target in the overlap zone
+            targets = [Target(id=overlap_id, priority=3, active=True)] + targets
+
+    return targets
+
 
 
 def spawn_targets_stochastic(step: int, seed: int = 42, density_factor: float = 2.5) -> List[Target]:
