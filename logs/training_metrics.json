@@ -1,0 +1,47 @@
+[
+  {
+    "episode": 1,
+    "conflict_rate": 0.4149,
+    "coordination_score": 0.5851,
+    "reward": 66.5,
+    "per_agent_rewards": {
+      "satellite": 57.0,
+      "drone": -7.0,
+      "radar": 3.5,
+      "command": 13.0
+    },
+    "difficulty": 0.0,
+    "phase": 1,
+    "conflict_injection": false
+  },
+  {
+    "episode": 2,
+    "conflict_rate": 0.4149,
+    "coordination_score": 0.5851,
+    "reward": 66.5,
+    "per_agent_rewards": {
+      "satellite": 57.0,
+      "drone": -7.0,
+      "radar": 3.5,
+      "command": 13.0
+    },
+    "difficulty": 0.0,
+    "phase": 1,
+    "conflict_injection": false
+  },
+  {
+    "episode": 3,
+    "conflict_rate": 0.4149,
+    "coordination_score": 0.5851,
+    "reward": 66.5,
+    "per_agent_rewards": {
+      "satellite": 57.0,
+      "drone": -7.0,
+      "radar": 3.5,
+      "command": 13.0
+    },
+    "difficulty": 0.0,
+    "phase": 1,
+    "conflict_injection": false
+  }
+]
