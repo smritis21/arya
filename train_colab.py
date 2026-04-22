@@ -24,29 +24,53 @@ except ImportError:
     TRL_AVAILABLE = False
     print("⚠️  TRL not found — running in reward-logging-only mode.")
 
-MODEL_NAME = "unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit"
+model_name = "unsloth/llama-3-8b-bnb-4bit"
 
 model, tokenizer = None, None
 
 if UNSLOTH_AVAILABLE:
-    print(f"Loading {MODEL_NAME} with 4-bit quantization …")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=MODEL_NAME,
-        max_seq_length=1024,
-        load_in_4bit=True,
-        dtype=None,               # auto-detect bf16 / fp16
-    )
-    # Add LoRA for lightweight fine-tuning (fits T4 VRAM)
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=8,                      # rank (smaller = less VRAM)
-        lora_alpha=16,
-        target_modules=["q_proj", "v_proj"],
-        lora_dropout=0.0,
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-    )
-    print("✅ Model ready.")
+    print(f"Loading {model_name} with 4-bit quantization …")
+    try:
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=model_name,
+            max_seq_length=1024,
+            load_in_4bit=True,
+            dtype=None,               # auto-detect bf16 / fp16
+        )
+        # Add LoRA for lightweight fine-tuning (fits T4 VRAM)
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=8,                      # rank (smaller = less VRAM)
+            lora_alpha=16,
+            target_modules=["q_proj", "v_proj"],
+            lora_dropout=0.0,
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+        )
+        print("✅ Model ready.")
+    except Exception as _model_err:
+        print(f"⚠️  Model loading failed ({_model_err}).")
+        print(f"   Retrying with fallback: unsloth/tinyllama-bnb-4bit")
+        try:
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name="unsloth/tinyllama-bnb-4bit",
+                max_seq_length=1024,
+                load_in_4bit=True,
+                dtype=None,
+            )
+            model = FastLanguageModel.get_peft_model(
+                model,
+                r=8,
+                lora_alpha=16,
+                target_modules=["q_proj", "v_proj"],
+                lora_dropout=0.0,
+                bias="none",
+                use_gradient_checkpointing="unsloth",
+            )
+            print("✅ Fallback model ready.")
+        except Exception as _fallback_err:
+            print(f"⚠️  Fallback model also failed ({_fallback_err}).")
+            print("   Running in greedy baseline mode (no LLM).")
 else:
     print("Running without LLM — greedy baseline will be used.")
 
@@ -199,15 +223,29 @@ print(f"{'='*60}\n")
 # Initialise GRPOTrainer once before the loop
 grpo_trainer = None
 if TRL_AVAILABLE and model is not None:
-    from trl import GRPOConfig
-    grpo_cfg = GRPOConfig(
-        output_dir="./grpo_out",
-        num_train_epochs=1,
-        per_device_train_batch_size=4,
-        temperature=0.8,
-    )
-    grpo_trainer = GRPOTrainer(model=model, config=grpo_cfg, tokenizer=tokenizer)
-    print("GRPOTrainer ready.")
+    try:
+        grpo_cfg = GRPOConfig(
+            output_dir="./grpo_out",
+            num_train_epochs=1,
+            per_device_train_batch_size=4,
+            temperature=0.8,
+        )
+        # TRL >=0.9 uses processing_class; older versions use tokenizer
+        try:
+            grpo_trainer = GRPOTrainer(
+                model=model,
+                config=grpo_cfg,
+                processing_class=tokenizer,
+            )
+        except TypeError:
+            grpo_trainer = GRPOTrainer(
+                model=model,
+                config=grpo_cfg,
+                tokenizer=tokenizer,
+            )
+        print("GRPOTrainer ready.")
+    except Exception as _grpo_err:
+        print(f"⚠️  GRPOTrainer init failed ({_grpo_err}) — reward logging only.")
 
 for ep in range(1, NUM_EPISODES + 1):
     env_state = make_env(seed=ep, max_steps=MAX_STEPS)
