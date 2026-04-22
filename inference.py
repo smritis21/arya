@@ -223,39 +223,69 @@ def run_multi_task(name: str, env: AryaXEnv) -> float:
     print(f"  TASK (MULTI): {name.upper()}  |  max_steps={env.max_steps}  |  seed={env.seed}")
     print(f"{'='*50}")
 
-    obs_map      = env.reset()
-    negotiation  = NegotiationLayer()
-    reward_eng   = RewardEngine()
+    obs_map       = env.reset()
+    negotiation   = NegotiationLayer()
+    reward_eng    = RewardEngine()
     total_rewards = {a: 0.0 for a in AGENT_TYPES}
     done          = False
     steps_taken   = 0
 
+    print(f"[START] task={name} env=arya-x (multi-agent)", flush=True)
+
     while not done:
-        proposals = _greedy_multi_proposals(obs_map)
-        obs_map, step_rewards, done, info = env.step_multiagent(proposals)
+        # ── 1. Build greedy proposals (as dicts for interaction/ pipeline) ──
+        proposal_objs = _greedy_multi_proposals(obs_map)
+        proposals_dict = [
+            {"agent_id": p.agent_id, "sensor_id": p.sensor_id,
+             "target_id": p.target_id, "capability_score": 0.5}
+            for p in proposal_objs
+        ]
+
+        # ── 2. Build world_state from satellite's (global) observation ────
+        sat_obs = obs_map.get("satellite") or next(iter(obs_map.values()))
+        assigned_sids = {p["sensor_id"] for p in proposals_dict}
+        idle_sensors  = [s["id"] for s in sat_obs.sensors if s["id"] not in assigned_sids]
+        world_state = {
+            "sensors":      sat_obs.sensors,
+            "targets":      sat_obs.targets,
+            "idle_sensors": idle_sensors,
+            "step":         steps_taken,
+            "proposals":    proposals_dict,
+        }
+
+        # ── 3. Run full NegotiationLayer pipeline ─────────────────────────
+        neg_result = negotiation.negotiate(proposals_dict, world_state, lambda tied: tied[0])
+
+        # ── 4. Step env with resolved assignments (use Proposal objects) ──
+        obs_map, step_rewards, done, info = env.step_multiagent(proposal_objs)
         steps_taken += 1
 
-        for aid, r in step_rewards.items():
-            total_rewards[aid] += r
+        # ── 5. Compute per-agent rewards via RewardEngine ─────────────────
+        re_rewards = reward_eng.compute_step_reward(
+            neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
+        )
+        for aid in AGENT_TYPES:
+            total_rewards[aid] += re_rewards.get(aid, 0.0)
 
-        if info["conflicts"]:
-            types = [c["type"] for c in info["conflicts"]]
+        # ── 6. Log conflicts in required format ───────────────────────────
+        n_conflicts = len(neg_result.conflicts_detected)
+        if n_conflicts:
+            override = neg_result.override_invoked
             print(
-                f"  [CONFLICT] step={steps_taken} types={types} "
-                f"conflict_rate={info['conflict_rate']:.3f}",
+                f"[CONFLICT] step={steps_taken} n={n_conflicts} override={override}",
                 flush=True,
             )
 
-    conflict_rate      = info["conflict_rate"]
+    # ── 7. Episode summary ────────────────────────────────────────────────
+    conflict_rate      = negotiation.get_conflict_rate()
     coordination_score = 1.0 - conflict_rate
-    total_reward       = sum(total_rewards.values())
     scores             = reward_eng.compute_scores(total_rewards, env.max_steps, env.initial_sensor_count)
 
-    print(f"\n  Per-agent rewards : {total_rewards}")
-    print(f"  conflict_rate     : {conflict_rate:.3f}")
-    print(f"  coordination_score: {coordination_score:.3f}")
-    print(f"  efficiency        : {scores['efficiency']:.3f}")
-    print(f"  final_score       : {scores['final_score']:.3f}")
+    print(f"\nconflict_rate={conflict_rate:.4f}")
+    print(f"coordination_score={coordination_score:.4f}")
+    print(f"per_agent_rewards={total_rewards}")
+    print(f"  efficiency  : {scores['efficiency']:.4f}")
+    print(f"  final_score : {scores['final_score']:.4f}")
     return scores["final_score"]
 
 
