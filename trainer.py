@@ -511,6 +511,55 @@ class ARYAXTrainer:
             json.dump(self._metrics_log, f, indent=2)
         logger.info("Training metrics saved to %s", METRICS_LOG_PATH)
 
+        # ── Final Hackathon Submission Save ──
+        final_dir = Path("./checkpoints/arya_x_lora")
+        final_dir.mkdir(parents=True, exist_ok=True)
+        self.save_checkpoint(str(final_dir))
+        
+        # Copy metrics
+        import shutil
+        shutil.copy(METRICS_LOG_PATH, final_dir / "training_metrics.json")
+        
+        # Plot and save reward curve
+        try:
+            import matplotlib.pyplot as plt
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+            
+            def rolling_avg(data, w=5):
+                out = []
+                for i in range(len(data)):
+                    window = data[max(0, i - w + 1): i + 1]
+                    out.append(sum(window) / len(window))
+                return out
+                
+            rewards = [m["reward"] for m in self._metrics_log]
+            conflicts = [m["conflict_rate"] for m in self._metrics_log]
+            
+            ax1.plot(rewards, alpha=0.3, color="#5B8DB8", label="Raw")
+            if rewards: ax1.plot(rolling_avg(rewards), color="#1B4F72", linewidth=2, label="Rolling avg (5)")
+            ax1.set_title("Episode Reward", fontsize=13, fontweight="bold")
+            ax1.set_xlabel("Episode")
+            ax1.set_ylabel("Total Reward")
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+
+            ax2.plot(conflicts, alpha=0.3, color="#C0392B", label="Raw")
+            if conflicts: ax2.plot(rolling_avg(conflicts), color="#922B21", linewidth=2, label="Rolling avg (5)")
+            ax2.set_title("Conflict Rate per Episode", fontsize=13, fontweight="bold")
+            ax2.set_xlabel("Episode")
+            ax2.set_ylabel("Conflict Rate")
+            ax2.set_ylim(0.0, 1.0)
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+
+            plt.suptitle("ARYA-X Training Curves", fontsize=14, fontweight="bold", y=1.02)
+            plt.tight_layout()
+            plt.savefig(final_dir / "reward_curve.png", dpi=120, bbox_inches="tight")
+            plt.close()
+            logger.info("Saved reward_curve.png to %s", final_dir)
+        except Exception as e:
+            logger.warning("Could not generate reward curve: %s", e)
+
         # Final evaluation
         return self.evaluate()
 

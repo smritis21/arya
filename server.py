@@ -7,6 +7,7 @@ Run: python server.py
 import os
 import json
 import random as _random
+from pathlib import Path
 from flask import Flask, request, jsonify, render_template
 from env import SentinelEnv
 from env.models import Action
@@ -33,24 +34,86 @@ API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1"
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
-if HF_TOKEN:
+_base_model = None
+_tokenizer = None
+_has_adapters = False
+
+# Fallback mappings for local checkpoints
+AGENT_ID_MAP = {"satellite": "SAT", "drone": "UAV", "radar": "RDR", "command": "CMD"}
+
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from peft import PeftModel
+    _LOCAL_HF_AVAILABLE = True
+except ImportError:
+    _LOCAL_HF_AVAILABLE = False
+
+def init_local_models():
+    """Initializes local transformers model and loads LoRA adapters if available."""
+    global _base_model, _tokenizer, _has_adapters
+    if not _LOCAL_HF_AVAILABLE:
+        print("[WARN] transformers or peft not installed. Will use greedy fallback.")
+        return
+
+    checkpoint_dir = Path("./checkpoints/arya_x_lora")
+    if not checkpoint_dir.exists():
+        print(f"[WARN] No checkpoints found at {checkpoint_dir}. Will use greedy fallback.")
+        return
+
+    print(f"[LLM] Loading base model ({MODEL_NAME}) locally...")
+    try:
+        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, padding_side="left")
+        load_kwargs = {}
+        if torch.cuda.is_available():
+            load_kwargs["load_in_4bit"] = True
+            load_kwargs["device_map"] = "auto"
+        
+        base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, **load_kwargs)
+        
+        first_agent_id = "SAT"
+        first_adapter_path = checkpoint_dir / f"adapter_{first_agent_id}"
+        if not first_adapter_path.exists():
+             print(f"[WARN] Missing adapter {first_adapter_path}. Using greedy.")
+             return
+             
+        _base_model = PeftModel.from_pretrained(base_model, str(first_adapter_path), adapter_name=first_agent_id)
+        
+        for agent_canonical, agent_short in AGENT_ID_MAP.items():
+            if agent_short == first_agent_id:
+                continue
+            adapter_path = checkpoint_dir / f"adapter_{agent_short}"
+            if adapter_path.exists():
+                _base_model.load_adapter(str(adapter_path), adapter_name=agent_short)
+        
+        _has_adapters = True
+        print("[LLM] Local model and LoRA adapters loaded successfully.")
+    except Exception as e:
+        print(f"[ERROR] Failed to load local model/adapters: {e}")
+        _has_adapters = False
+
+# Run local init synchronously before requests
+print("\\nInitializing Environment and Models...")
+init_local_models()
+
+if HF_TOKEN and not _has_adapters:
     try:
         from openai import OpenAI
         _llm_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-        print(f"[LLM] Connected to {MODEL_NAME}")
+        print(f"[LLM] Connected to remote API: {MODEL_NAME}")
     except Exception as e:
         print(f"[LLM] Failed to init client: {e}. Using greedy fallback.")
-else:
-    print("[LLM] No HF_TOKEN set — using greedy fallback.")
+elif not _has_adapters:
+    print("[LLM] No HF_TOKEN set and local adapters missing — using greedy fallback.")
 
 
 # ── Single-agent helpers (unchanged) ─────────────────────────────────────────
 def _build_prompt(observation) -> str:
-    sensors = "\n".join(
+    sensors = "\\n".join(
         f"  - id={s.id} type={s.type} range={s.range}km available={s.available}"
         for s in observation.sensors if s.available
     )
-    targets = "\n".join(
+    targets = "\\n".join(
         f"  - id={t.id} priority={t.priority} active={t.active}"
         for t in observation.targets if t.active
     )
@@ -106,7 +169,7 @@ def _greedy_actions(observation) -> list[Action]:
 
 
 def _get_actions(observation) -> tuple[list[Action], str]:
-    if _llm_client:
+    if _llm_client and not _has_adapters: # Only use remote if local is missing
         try:
             prompt   = _build_prompt(observation)
             response = _llm_client.chat.completions.create(
@@ -127,11 +190,11 @@ def _get_actions(observation) -> tuple[list[Action], str]:
 
 # ── Multi-agent helpers ───────────────────────────────────────────────────────
 def _build_multi_prompt(agent_id: str, agent_obs) -> str:
-    sensors = "\n".join(
+    sensors = "\\n".join(
         f"  - id={s['id']} type={s['type']} range={s['range']}km available={s['available']}"
         for s in agent_obs.sensors if s["available"]
     )
-    targets = "\n".join(
+    targets = "\\n".join(
         f"  - id={t['id']} priority={t['priority']} active={t['active']}"
         for t in agent_obs.targets if t["active"]
     )
@@ -178,12 +241,54 @@ def _greedy_proposals(agent_id: str, agent_obs, used_sensors: set) -> list[Propo
     return proposals
 
 
+def _lora_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
+    """Build multi-agent proposals using local LoRA adapters."""
+    proposals: list[Proposal] = []
+    
+    for agent_id in AGENT_TYPES:
+        agent_obs = agent_obs_map[agent_id]
+        prompt = _build_multi_prompt(agent_id, agent_obs)
+        chat_prompt = f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\\n\\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n"
+        
+        try:
+            short_id = AGENT_ID_MAP[agent_id]
+            _base_model.set_adapter(short_id)
+            
+            inputs = _tokenizer(chat_prompt, return_tensors="pt").to(_base_model.device)
+            outputs = _base_model.generate(**inputs, max_new_tokens=128, temperature=0.1, do_sample=True, pad_token_id=_tokenizer.eos_token_id)
+            full_response = _tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            if "assistant" in full_response:
+                raw = full_response.split("assistant")[-1].strip()
+            else:
+                raw = full_response
+                
+            start, end = raw.find("["), raw.rfind("]") + 1
+            if start == -1 or end == 0:
+                continue
+            items = json.loads(raw[start:end])
+            
+            valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"]}
+            valid_targets = {t["id"] for t in agent_obs.targets if t["active"]}
+            for item in items:
+                sid, tid = item.get("sensor_id"), item.get("target_id")
+                if sid in valid_sensors and tid in valid_targets:
+                    proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
+        except Exception as e:
+            print(f"[WARN] LoRA generation failed for {agent_id}: {e}")
+            
+    return proposals, "lora"
+
+
 def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
     """Build proposals from all agents. Returns (proposals, source)."""
     proposals: list[Proposal] = []
     used_sensors: set = set()
 
-    if _llm_client:
+    if _has_adapters:
+        return _lora_multi_proposals(agent_obs_map)
+
+    if _llm_client and not _has_adapters: # API fallback
         try:
             for agent_id in AGENT_TYPES:
                 agent_obs = agent_obs_map[agent_id]
@@ -227,8 +332,9 @@ def status():
         "status":       "ok",
         "obs_ready":    obs is not None,
         "mx_obs_ready": mx_obs is not None,
-        "llm_enabled":  _llm_client is not None,
-        "model":        MODEL_NAME if _llm_client else None
+        "llm_enabled":  _llm_client is not None or _has_adapters,
+        "model":        MODEL_NAME if _llm_client or _has_adapters else None,
+        "lora_active":  _has_adapters
     })
 
 
