@@ -19,6 +19,16 @@ dependencies = [
     "python-dotenv>=1.0.1",
 ]
 
+[project.optional-dependencies]
+training = [
+    "trl>=0.8.0",
+    "transformers>=4.40.0",
+    "peft>=0.10.0",
+    "torch",
+    "accelerate",
+    "bitsandbytes",
+]
+
 [project.scripts]
 server = "server.app:main"
 

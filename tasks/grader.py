@@ -127,100 +127,79 @@ def run_deterministic_eval(
     """
     try:
         from env.environment import SentinelEnv
-        from tasks.easy_task import get_easy_env
-        from tasks.medium_task import get_medium_env
-        from tasks.hard_task import get_hard_env
+        from env.multiagent import AryaXEnv
+        from tasks.easy_task import get_easy_env, get_easy_multi_env
+        from tasks.medium_task import get_medium_env, get_medium_multi_env
+        from tasks.hard_task import get_hard_env, get_hard_multi_env
     except ImportError as exc:
         raise ImportError(f"env/ or tasks/ package not found: {exc}") from exc
 
-    TASKS = [
-        ("easy",   get_easy_env,   42),
-        ("medium", get_medium_env, 7),
-        ("hard",   get_hard_env,   13),
-    ]
+    if mode == "multi":
+        TASKS = [
+            ("easy",   get_easy_multi_env,   42),
+            ("medium", get_medium_multi_env, 7),
+            ("hard",   get_hard_multi_env,   13),
+        ]
+    else:
+        TASKS = [
+            ("easy",   get_easy_env,   42),
+            ("medium", get_medium_env, 7),
+            ("hard",   get_hard_env,   13),
+        ]
 
     results: dict = {}
     all_scores: list[float] = []
     all_conflict_rates: list[float] = []
 
     for task_name, get_env_fn, seed in TASKS:
-        env: SentinelEnv = get_env_fn()
-        obs = env.reset()
-
         if mode == "multi":
-            # Multi-agent mode — uses NegotiationLayer + agents list
+            # Multi-agent mode — uses AryaXEnv + NegotiationLayer
             try:
                 from interaction import NegotiationLayer
                 from interaction.reward import RewardEngine
             except ImportError as exc:
                 raise ImportError(f"interaction/ package not found: {exc}") from exc
 
+            env: AryaXEnv = get_env_fn()
+            obs_map = env.reset()
             nl           = NegotiationLayer()
             reward_eng   = RewardEngine()
-            agent_ids    = ["SAT", "UAV", "RDR", "CMD"]
+            agent_ids    = ["satellite", "drone", "radar", "command"]
             total_rewards: dict[str, float] = {aid: 0.0 for aid in agent_ids}
             done         = False
 
             rng = __import__("random").Random(seed)
 
             while not done:
-                sensors_list = [
-                    {"id": s.id, "type": s.type, "range": s.range, "available": s.available}
-                    for s in obs.sensors
-                ]
-                targets_list = [
-                    {"id": t.id, "priority": t.priority, "active": t.active, "type": "strategic"}
-                    for t in obs.targets
-                ]
-
                 # Greedy proposals per agent
+                from env.multiagent import Proposal
                 proposals = []
-                available = [s for s in sensors_list if s.get("available", True)]
-                active_t  = sorted(
-                    [t for t in targets_list if t.get("active", True)],
-                    key=lambda t: -t.get("priority", 0),
-                )
                 used_sensors: set[str] = set()
                 used_targets: set[str] = set()
-                for i, aid in enumerate(agent_ids):
-                    if i < len(available) and active_t:
-                        sensor = available[i % len(available)]
-                        target = active_t[i % len(active_t)]
-                        if sensor["id"] not in used_sensors:
-                            proposals.append({
-                                "agent_id":          aid,
-                                "sensor_id":         sensor["id"],
-                                "target_id":         target["id"],
-                                "priority_estimate": target.get("priority", 1),
-                                "confidence":        0.8,
-                                "capability_score":  0.7,
-                            })
-                            used_sensors.add(sensor["id"])
+                for agent_id in agent_ids:
+                    agent_obs = obs_map[agent_id]
+                    my_sensors = [
+                        s for s in agent_obs.sensors
+                        if s["available"] and s["id"] not in used_sensors
+                        and (agent_id == "command" or s["type"] == agent_id)
+                    ]
+                    targets = sorted(
+                        [t for t in agent_obs.targets if t["active"]],
+                        key=lambda t: -t["priority"]
+                    )
+                    for sensor in my_sensors:
+                        for target in targets:
+                            if target["id"] not in used_targets:
+                                proposals.append(Proposal(
+                                    agent_id=agent_id,
+                                    sensor_id=sensor["id"],
+                                    target_id=target["id"]
+                                ))
+                                used_sensors.add(sensor["id"])
+                                used_targets.add(target["id"])
+                                break
 
-                assigned_sids = {p["sensor_id"] for p in proposals}
-                idle_sensors  = [s["id"] for s in sensors_list if s["id"] not in assigned_sids]
-
-                world_state = {
-                    "sensors":      sensors_list,
-                    "targets":      targets_list,
-                    "idle_sensors": idle_sensors,
-                    "step":         env.current_step,
-                    "proposals":    proposals,
-                }
-
-                def _cmd_fn(tied):
-                    return max(tied, key=lambda p: p.get("capability_score", 0.0))
-
-                neg_result = nl.negotiate(proposals, world_state, _cmd_fn)
-                env_actions = [
-                    {"sensor_id": a["sensor_id"], "target_id": a["target_id"]}
-                    for a in neg_result.final_assignments
-                ]
-                obs, _, done, _ = env.step_batch(env_actions)
-
-                step_r = reward_eng.compute_step_reward(
-                    neg_result.final_assignments, neg_result, world_state, agent_ids
-                )
+                obs_map, step_r, done, info = env.step_multiagent(proposals)
                 for aid, r in step_r.items():
                     total_rewards[aid] += r
 
@@ -228,7 +207,7 @@ def run_deterministic_eval(
                 per_agent_rewards=total_rewards,
                 step_count=env.max_steps,
                 num_sensors=env.initial_sensor_count,
-                negotiation_layer=nl,
+                negotiation_layer=env.negotiation,
                 num_agents=4,
             )
             all_scores.append(task_result["overall_score"])
@@ -236,6 +215,8 @@ def run_deterministic_eval(
 
         else:
             # Single-agent mode — uses greedy baseline policy
+            env: SentinelEnv = get_env_fn()
+            obs = env.reset()
             try:
                 from agent.policy import select_action
             except ImportError:

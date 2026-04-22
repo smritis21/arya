@@ -126,6 +126,9 @@ PRIORITY_REWARD = {3: 2.0, 2: 1.0, 1: 0.5}
 MISSED_HIGH_PENALTY = -2.0
 IDLE_PENALTY = -2.0
 
+# Stable per-agent salts — avoids hash() which is randomised per Python process
+_AGENT_SALT = {"satellite": 1001, "drone": 2002, "radar": 3003, "command": 4004}
+
 
 class AryaXEnv:
     def __init__(self, max_steps: int = 20, seed: int = 42, density_factor: float = 2.5,
@@ -222,7 +225,7 @@ class AryaXEnv:
         for agent_type in AGENT_TYPES:
             agent_sensors = [s for s in self.sensors if s.type == agent_type or agent_type == "command"]
             masked_targets = apply_mask(self.targets, agent_type, agent_sensors)
-            rng = random.Random(self.seed + self.current_step + hash(agent_type))
+            rng = random.Random(self.seed + self.current_step + _AGENT_SALT.get(agent_type, 0))
             noisy_targets = add_observation_noise(masked_targets, agent_type, rng)
             # Apply schema drift to noisy targets
             drifted = [Target(id=t.id, priority=priority_map.get(t.priority, t.priority), active=t.active)

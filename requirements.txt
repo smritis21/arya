@@ -29,6 +29,18 @@ ffmpy==1.0.0
 filelock==3.25.2
 Flask==3.0.3
 Flask-Cors==4.0.1
+
+# ── Optional: training stack (GRPO/TRL) ──────────────────────────────────────
+# These are NOT installed by default. Install manually to enable trainer.py:
+#   pip install trl>=0.8.0 transformers>=4.40.0 peft>=0.10.0 torch accelerate bitsandbytes
+# On Colab with GPU: also install unsloth (see train_colab.py)
+# trl
+# transformers
+# peft
+# torch
+# accelerate
+# bitsandbytes
+# unsloth
 fsspec==2026.3.0
 gradio==6.11.0
 gradio_client==2.4.0
