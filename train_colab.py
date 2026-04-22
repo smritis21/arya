@@ -203,55 +203,55 @@ def reward_function(prompts, completions, **kwargs) -> list[float]:
             rewards.append(1.0)           # safe default on parse failure
     return rewards
 
-# ── 7. GRPOTrainer init (once, before episode loop) ──────────────────
-# TRL >= 0.9 requires:  args=GRPOConfig(...)  and  reward_funcs=<callable>
-# Do NOT use config= (old API) or pass rewards manually.
+# ── 7. Training constants (defined BEFORE GRPOConfig so they can be referenced) ──
+NUM_EPISODES = 50
+MAX_STEPS    = 20
+G            = 4          # concurrent proposals per step (GRPO group size)
+
+# ── 8. GRPOConfig (module-level — always defined, never inside an if block) ──────
+# grpo_cfg is set to None when TRL is unavailable, preventing NameError downstream.
+grpo_cfg = None
+if TRL_AVAILABLE:
+    grpo_cfg = GRPOConfig(
+        output_dir="./grpo_out",
+        num_train_epochs=1,
+        per_device_train_batch_size=2,   # T4-safe (2 * 4 grad accum = effective batch 8)
+        gradient_accumulation_steps=4,
+        num_generations=G,               # G is now defined above
+        max_new_tokens=64,
+        temperature=0.8,
+        logging_steps=1,
+        report_to="none",               # no wandb for demo
+    )
+
+# ── 9. GRPOTrainer init ───────────────────────────────────────────────────────────
+# Uses args= (not config=) — required by TRL >= 0.8.
+# reward_funcs= is required; without it GRPOTrainer raises TypeError.
+# Falls back to processing_class= if tokenizer= is rejected (TRL >= 0.9 API change).
 
 grpo_trainer = None
 
-if TRL_AVAILABLE and model is not None and tokenizer is not None:
-    try:
-        grpo_cfg = GRPOConfig(
-            output_dir="./grpo_out",
-            num_train_epochs=1,
-            per_device_train_batch_size=2,      # T4-safe
-            gradient_accumulation_steps=4,
-            num_generations=G if "G" in dir() else 4,
-            max_new_tokens=64,
-            temperature=0.8,
-            logging_steps=1,
-            report_to="none",                   # disable wandb for demo
-        )
-        grpo_trainer = GRPOTrainer(
-            model=model,
-            tokenizer=tokenizer,          # TRL < 0.9 uses tokenizer=
-            args=grpo_cfg,                # NOTE: args= not config=
-            reward_funcs=reward_function, # REQUIRED by TRL >= 0.8
-        )
-        print("✅ GRPOTrainer ready.")
-    except TypeError as _te:
-        # TRL >= 0.9 renamed tokenizer → processing_class
+if TRL_AVAILABLE and model is not None and tokenizer is not None and grpo_cfg is not None:
+    # First attempt: tokenizer= keyword (TRL 0.8.x)
+    for _kw in [{"tokenizer": tokenizer}, {"processing_class": tokenizer}]:
         try:
             grpo_trainer = GRPOTrainer(
                 model=model,
-                processing_class=tokenizer,
                 args=grpo_cfg,
                 reward_funcs=reward_function,
+                **_kw,
             )
-            print("✅ GRPOTrainer ready (processing_class API).")
-        except Exception as _e2:
-            print(f"⚠️  GRPOTrainer init failed: {_e2}")
+            api_used = "tokenizer" if "tokenizer" in _kw else "processing_class"
+            print(f"GRPOTrainer ready ({api_used} API).")
+            break
+        except TypeError:
+            continue          # try next keyword variant
+        except Exception as _e:
+            print(f"GRPOTrainer init failed: {_e}")
             grpo_trainer = None
-    except Exception as _e:
-        print(f"⚠️  GRPOTrainer init failed: {_e}")
-        grpo_trainer = None
+            break
 else:
-    print("ℹ️  GRPOTrainer skipped (model or TRL not available).")
-
-# ── 8. Episode training loop ─────────────────────────────────────────
-NUM_EPISODES = 50
-MAX_STEPS    = 20
-G            = 4          # number of concurrent proposals per step
+    print("GRPOTrainer skipped (model or TRL not available).")
 
 episode_rewards:        list[float] = []
 episode_conflict_rates: list[float] = []
