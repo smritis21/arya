@@ -45,3 +45,8 @@ def get_medium_task():
 def get_medium_env():
     from env import SentinelEnv
     return SentinelEnv(max_steps=MEDIUM_TASK_CONFIG["max_steps"], seed=7, config=MEDIUM_TASK_CONFIG)
+
+
+def get_medium_multi_env():
+    from env.multiagent import AryaXEnv
+    return AryaXEnv(max_steps=MEDIUM_TASK_CONFIG["max_steps"], seed=7, density_factor=2.5, conflict_injection=True)

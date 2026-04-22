@@ -28,3 +28,8 @@ def get_easy_task():
 def get_easy_env():
     from env import SentinelEnv
     return SentinelEnv(max_steps=EASY_TASK_CONFIG["max_steps"], seed=42, config=EASY_TASK_CONFIG)
+
+
+def get_easy_multi_env():
+    from env.multiagent import AryaXEnv
+    return AryaXEnv(max_steps=EASY_TASK_CONFIG["max_steps"], seed=42, density_factor=1.5)
