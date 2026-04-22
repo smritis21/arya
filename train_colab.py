@@ -215,13 +215,8 @@ if TRL_AVAILABLE:
     grpo_cfg = GRPOConfig(
         output_dir="./grpo_out",
         num_train_epochs=1,
-        per_device_train_batch_size=2,   # T4-safe (2 * 4 grad accum = effective batch 8)
-        gradient_accumulation_steps=4,
-        num_generations=G,               # G is now defined above
-        max_new_tokens=64,
-        temperature=0.8,
-        logging_steps=1,
-        report_to="none",               # no wandb for demo
+        per_device_train_batch_size=2,
+        temperature=0.7,
     )
 
 # ── 9. GRPOTrainer init ───────────────────────────────────────────────────────────
