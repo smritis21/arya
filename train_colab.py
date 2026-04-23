@@ -338,7 +338,7 @@ if grpo_trainer is not None and all_prompts:
         })
         grpo_trainer.train_dataset = train_ds
 
-        grpo_trainer.train(max_steps=TRAINING_STEPS)   # capped — no 40-hour runs
+        grpo_trainer.train()
         print("GRPO training complete.")
     except Exception as _grpo_train_err:
         print(f"GRPO training failed: {_grpo_train_err}")
