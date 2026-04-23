@@ -218,6 +218,7 @@ if TRL_AVAILABLE:
         num_train_epochs=1,
         per_device_train_batch_size=2,
         temperature=0.7,
+        max_steps=30,
     )
 
 # ── 9. GRPOTrainer init ───────────────────────────────────────────────────────────
