@@ -262,6 +262,80 @@ print(f"\n{'='*60}")
 print(f" ARYA-X Colab Training  |  {NUM_EPISODES} episodes  |  G={G}")
 print(f"{'='*60}\n")
 
+# ── Prompt formatter ─────────────────────────────────────────────────
+# Produces an instruction-style prompt the LLM can actually follow.
+# Used for both GRPO training samples and (optionally) live inference.
+
+def format_state(env_state: dict, agent_id: str = "satellite") -> str:
+    sensors = [{"id": s["id"], "type": s["type"]}
+               for s in env_state["sensors"] if s["available"]]
+    targets = [{"id": t["id"], "priority": t["priority"]}
+               for t in env_state["targets"] if t["active"]]
+    obs_block = (
+        f"Agent: {agent_id}\n"
+        f"Sensors:\n" +
+        "".join(f"- {s['id']} ({s['type']})\n" for s in sensors) +
+        f"Targets:\n" +
+        "".join(f"- {t['id']} (priority {t['priority']})\n" for t in targets)
+    )
+    return f"""You are an AI controlling a multi-agent ISR (Intelligence, Surveillance, Reconnaissance) system.
+
+MISSION:
+Assign available sensors to active targets efficiently.
+
+STRICT OUTPUT RULES (MANDATORY):
+- Output ONLY valid JSON
+- Do NOT include explanations, text, or comments
+- Do NOT include markdown
+- JSON must be a list of objects
+- Each object MUST have: "agent_id", "sensor_id", "target_id"
+
+FORMAT (FOLLOW EXACTLY):
+[
+  {{"agent_id":"{agent_id}","sensor_id":"S1","target_id":"T0_1"}}
+]
+
+NOW PROCESS THIS STATE:
+
+{obs_block}
+FINAL INSTRUCTION:
+Return ONLY the JSON list. No explanation."""
+
+
+def llm_propose(env_state: dict, sid_fallback: str, tid_fallback: str) -> str:
+    """
+    Try to get a proposal from the LLM (low temperature = stable JSON).
+    Falls back to the greedy selection if model is unavailable or output is invalid.
+    """
+    if model is None or tokenizer is None:
+        return json.dumps([{"agent_id": "satellite",
+                            "sensor_id": sid_fallback,
+                            "target_id": tid_fallback}])
+    try:
+        prompt = format_state(env_state)
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with __import__("torch").no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=100,
+                do_sample=True,
+                temperature=0.3,     # low = more stable JSON output
+            )
+        # Decode only the newly generated tokens
+        new_ids  = output_ids[0][inputs["input_ids"].shape[-1]:]
+        response = tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+        # Quick sanity-check: must contain valid JSON list
+        parsed = json.loads(response)
+        if isinstance(parsed, list) and parsed:
+            return response
+    except Exception:
+        pass
+    # Fallback: return the greedy assignment as a valid JSON string
+    return json.dumps([{"agent_id": "satellite",
+                        "sensor_id": sid_fallback,
+                        "target_id": tid_fallback}])
+
+
 for ep in range(1, NUM_EPISODES + 1):
     env_state = make_env(seed=ep, max_steps=MAX_STEPS)
     env_state = env_reset(env_state)
@@ -291,15 +365,9 @@ for ep in range(1, NUM_EPISODES + 1):
         if sid is None:
             break
 
-        # Build GRPO training samples from this step
-        prompt_str = json.dumps({
-            "step":    step_idx,
-            "sensors": [{"id": s["id"], "type": s["type"]}
-                        for s in env_state["sensors"] if s["available"]],
-            "targets": [{"id": t["id"], "priority": t["priority"]}
-                        for t in env_state["targets"] if t["active"]],
-        })
-        resp_str = json.dumps({"sensor_id": sid, "target_id": tid})
+        # Build GRPO training sample: structured prompt + LLM-generated response
+        prompt_str = format_state(env_state)
+        resp_str   = llm_propose(env_state, sid, tid)
         all_prompts.append(prompt_str)
         all_responses.append(resp_str)
 
