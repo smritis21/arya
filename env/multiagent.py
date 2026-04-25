@@ -194,8 +194,14 @@ class AryaXEnv:
 
         # Run full negotiation pipeline (interaction/)
         neg_result = self.negotiation.negotiate(proposals_raw, world_state, _cmd_override)
+
+        # Detect conflicts on raw proposals (before _validate_proposals drops duplicates)
+        # so conflict log and rate reflect actual agent behaviour, not post-validation state
+        conflicts_raw = self.negotiation.detector.detect(proposals_raw, world_state)
+        if self.negotiation._history:
+            self.negotiation._history[-1].step_metrics["num_conflicts"] = len(conflicts_raw)
         final_assignments = neg_result.final_assignments  # list[{sensor_id, target_id}]
-        conflicts = neg_result.conflicts_detected
+        conflicts = conflicts_raw  # use pre-validation conflicts for accurate reporting
 
         # Build agent_id lookup from proposals
         sensor_to_agent = {p.sensor_id: p.agent_id for p in proposals}
@@ -224,22 +230,40 @@ class AryaXEnv:
             self._assignments.append({"sensor": sid, "target": tid, "agent": agent_id})
             agent_assignments[agent_id].append({"sensor_id": sid, "target_id": tid})
 
-        # Per-agent rewards via RewardEngine
-        committed = [{"sensor_id": sid, "target_id": tid}
-                     for sid, tid in ((a["sensor_id"], a["target_id"]) for a in final_assignments)
-                     if tid in handled_ids]
-        # Rebuild world_state with committed proposals for RewardEngine
-        world_state["proposals"] = [
-            {"agent_id": sensor_to_agent.get(p["sensor_id"], "command"),
-             "sensor_id": p["sensor_id"], "target_id": p["target_id"]}
-            for p in proposals_raw
-        ]
-        step_rewards = self.reward_engine.compute_step_reward(
-            committed, neg_result, world_state, AGENT_TYPES
-        )
+        # Per-agent rewards — direct priority-based calculation
+        step_rewards: Dict[str, float] = {a: 0.0 for a in AGENT_TYPES}
+        # Use pre-step target map (targets were deactivated in the loop above)
+        pre_step_target_map = {t["id"]: t for t in targets_dict}
+        n_assigned = len(used_sensor_ids)
+        recent = self._assignments[-n_assigned:] if n_assigned else []
+        for a in recent:
+            agent_id = a["agent"]
+            tgt = pre_step_target_map.get(a["target"])
+            if tgt and agent_id in step_rewards:
+                step_rewards[agent_id] += PRIORITY_REWARD.get(tgt["priority"], 0.0)
+
+        # Conflict penalties
+        for c in conflicts:
+            from interaction.conflict import ConflictType
+            if c.conflict_type in (ConflictType.REDUNDANT_COVERAGE, ConflictType.OVER_ASSIGNMENT):
+                for aid in c.involved_agents:
+                    if aid in step_rewards:
+                        step_rewards[aid] += CONFLICT_PENALTY
+
+        # Idle penalty — sensor available but P3 target uncovered
+        covered_tids = {a["target"] for a in recent}
+        uncovered_p3 = [t for t in targets_dict if t.get("active") and t["priority"] == 3 and t["id"] not in covered_tids]
+        if uncovered_p3:
+            for s in sensors_dict:
+                if s["id"] not in used_sensor_ids:
+                    agent_id = sensor_to_agent.get(s["id"])
+                    if agent_id and agent_id in step_rewards:
+                        step_rewards[agent_id] += IDLE_PENALTY
 
         for a in AGENT_TYPES:
             self._agent_rewards[a] += step_rewards.get(a, 0.0)
+
+        print(f"[DEBUG] step={self.current_step} step_rewards={step_rewards} cumulative={self._agent_rewards}")
 
         self._missed.extend(
             t.id for t in self.targets

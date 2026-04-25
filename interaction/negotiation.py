@@ -131,20 +131,13 @@ class NegotiationLayer:
     # ── Key training metric ──────────────────────────────────────────
     def get_conflict_rate(self, window: int = 50) -> float:
         """
-        Fraction of proposals that generated conflicts over the last `window` steps.
-        Denominator is total proposals — not steps — to be meaningful.
-        Returns 0.0 if history is empty.
+        Fraction of steps that had at least one conflict over the last `window` steps.
         """
         if not self._history:
             return 0.0
-
         recent = self._history[-window:]
-        total_proposals = sum(r.step_metrics["num_proposals"] for r in recent)
-        total_conflicts  = sum(r.step_metrics["num_conflicts"]  for r in recent)
-
-        if total_proposals == 0:
-            return 0.0
-        return min(1.0, total_conflicts / total_proposals)
+        steps_with_conflict = sum(1 for r in recent if r.step_metrics["num_conflicts"] > 0)
+        return min(1.0, steps_with_conflict / len(recent))
 
     # ── Accessors ────────────────────────────────────────────────────
     def get_step_metrics_history(self) -> list[dict]:
