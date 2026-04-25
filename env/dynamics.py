@@ -7,12 +7,17 @@ SENSOR_TYPES = ["satellite", "drone", "radar"]
 TARGET_TYPES = ["strategic", "kinetic", "airspace"]
 
 
-def initialize_sensors(seed: int = 42) -> List[Sensor]:
+def initialize_sensors(seed: int = 42, num_sensors: int = 0) -> List[Sensor]:
     rng = random.Random(seed)
-    return [
-        Sensor(id=f"S{i+1}", type=rng.choice(SENSOR_TYPES), range=round(rng.uniform(100.0, 500.0), 2), available=True)
-        for i in range(rng.randint(3, 5))
-    ]
+    # If num_sensors specified use it, otherwise derive from seed (min 3)
+    count = num_sensors if num_sensors > 0 else max(3, rng.randint(3, 5))
+    # Guarantee at least one of each type when count >= 3
+    types = SENSOR_TYPES[:] 
+    sensors = []
+    for i in range(count):
+        t = types[i % len(types)] if i < len(types) else rng.choice(SENSOR_TYPES)
+        sensors.append(Sensor(id=f"S{i+1}", type=t, range=round(rng.uniform(100.0, 500.0), 2), available=True))
+    return sensors
 
 
 def spawn_targets(
@@ -70,24 +75,26 @@ def spawn_targets(
 
 
 def spawn_targets_stochastic(step: int, seed: int = 42, density_factor: float = 2.5) -> List[Target]:
-    """Poisson-based target spawning. density_factor: easy=1.5, medium=2.5, hard=4.0"""
+    """Spawn targets. density_factor controls exact count: 1.5=3, 2.5=5, 4.0=8"""
     rng = random.Random((seed * 6364136223846793005 + step) & 0xFFFFFFFFFFFFFFFF)
-    # Poisson sample via Knuth algorithm
-    L = math.exp(-density_factor)
-    k, p = 0, 1.0
-    while p > L:
-        k += 1
-        p *= rng.random()
-    count = max(1, k - 1)
-    return [
-        Target(
+    # Fixed counts per difficulty level — no randomness in count
+    if density_factor <= 1.5:
+        count = 3   # Easy
+    elif density_factor <= 2.5:
+        count = 5   # Medium
+    else:
+        count = 8   # Hard
+    # Guarantee at least one P3 target per step
+    targets = []
+    for i in range(count):
+        priority = 3 if i == 0 else rng.randint(1, 3)
+        targets.append(Target(
             id=f"T{step}_{i+1}",
-            priority=rng.randint(1, 3),
+            priority=priority,
             active=True,
             type=rng.choice(TARGET_TYPES),
-        )
-        for i in range(count)
-    ]
+        ))
+    return targets
 
 
 def apply_correlated_failures(sensors: List[Sensor], weather_seed: int, failure_prob: float) -> List[Sensor]:

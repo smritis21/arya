@@ -106,7 +106,9 @@ class AryaXEnv:
 
     def reset(self) -> Dict[str, AgentObservation]:
         self._rng = random.Random(self.seed)
-        self.sensors = initialize_sensors(self.seed)
+        # Scale sensor count with density: easy=3, medium=4, hard=5
+        num_sensors = max(3, min(5, int(self.density_factor * 0.9) + 2))
+        self.sensors = initialize_sensors(self.seed, num_sensors=num_sensors)
         if self.failure_prob > 0.0:
             self.sensors = apply_correlated_failures(self.sensors, self._rng.randint(0, 9999), self.failure_prob)
         self.targets = self._clamp_targets(

@@ -46,7 +46,7 @@
           <div class="task-indicator easy"></div>
           <div class="task-info">
             <div class="task-name">EASY</div>
-            <div class="task-meta">2 sensors &bull; 3 targets &bull; 20 steps</div>
+            <div class="task-meta">3 sensors &bull; 3 targets &bull; 20 steps</div>
           </div>
           <div class="task-threat easy-text">LOW</div>
         </button>
@@ -54,7 +54,7 @@
           <div class="task-indicator medium"></div>
           <div class="task-info">
             <div class="task-name">MEDIUM</div>
-            <div class="task-meta">3 sensors &bull; 5 targets &bull; 40 steps</div>
+            <div class="task-meta">4 sensors &bull; 5 targets &bull; 40 steps</div>
           </div>
           <div class="task-threat medium-text">MOD</div>
         </button>
@@ -62,7 +62,7 @@
           <div class="task-indicator hard"></div>
           <div class="task-info">
             <div class="task-name">HARD</div>
-            <div class="task-meta">4 sensors &bull; 8 targets &bull; 60 steps</div>
+            <div class="task-meta">5 sensors &bull; 8 targets &bull; 60 steps</div>
           </div>
           <div class="task-threat hard-text">HIGH</div>
         </button>
@@ -121,23 +121,25 @@
       <button class="map-tool" id="tool-threat-h" onclick="setTool('threat-h')" title="Place HIGH threat">&#9650; HIGH THREAT</button>
       <button class="map-tool" id="tool-threat-m" onclick="setTool('threat-m')" title="Place MED threat">&#9654; MED THREAT</button>
       <button class="map-tool" id="tool-threat-l" onclick="setTool('threat-l')" title="Place LOW threat">&#9679; LOW THREAT</button>
+      <button onclick="document.getElementById('infoModal').style.display='flex'" style="background:#395144;color:#F0EBCE;border:none;border-radius:3px;font-size:0.68em;font-weight:700;padding:4px 10px;cursor:pointer;letter-spacing:0.05em;font-family:'Courier New',monospace;">? LEGEND</button>
       <span class="map-tool-hint" id="toolHint">Load a mission first</span>
     </div>
     <div class="map-container">
       <div id="map"></div>
       <div class="map-legend">
-        <div class="legend-item"><span class="legend-dot sat"></span>Satellite</div>
-        <div class="legend-item"><span class="legend-dot drone"></span>Drone</div>
-        <div class="legend-item"><span class="legend-dot radar"></span>Radar</div>
-        <div class="legend-item"><span class="legend-dot threat-h"></span>HIGH Threat</div>
-        <div class="legend-item"><span class="legend-dot threat-m"></span>MED Threat</div>
-        <div class="legend-item"><span class="legend-dot threat-l"></span>LOW Threat</div>
+        <div class="legend-item"><span class="legend-dot sat"></span><span title="Satellite sensor — wide-area coverage, long range. Best for strategic targets.">Satellite</span></div>
+        <div class="legend-item"><span class="legend-dot drone"></span><span title="Drone sensor — tactical, precise, short range. Best for kinetic/moving targets.">Drone</span></div>
+        <div class="legend-item"><span class="legend-dot radar"></span><span title="Radar sensor — fast detection, grid coverage. Best for airspace targets.">Radar</span></div>
+        <div class="legend-item"><span class="legend-dot threat-h"></span><span title="HIGH priority threat (P3) — critical, must be covered immediately. +2.0 reward.">HIGH Threat</span></div>
+        <div class="legend-item"><span class="legend-dot threat-m"></span><span title="MED priority threat (P2) — moderate risk. +1.0 reward.">MED Threat</span></div>
+        <div class="legend-item"><span class="legend-dot threat-l"></span><span title="LOW priority threat (P1) — minor risk. +0.5 reward.">LOW Threat</span></div>
         <!-- Multi-agent legend (shown in multi mode) -->
-        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-satellite"></span>Satellite Agent</div>
-        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-drone"></span>Drone Agent</div>
-        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-radar"></span>Radar Agent</div>
-        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-command"></span>Command Agent</div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-satellite"></span><span title="Satellite Agent — controls satellite sensors. Sees partial map. Specialises in strategic wide-area targets.">Satellite Agent</span></div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-drone"></span><span title="Drone Agent — controls drone sensors. Sees partial map. Specialises in kinetic/tactical targets.">Drone Agent</span></div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-radar"></span><span title="Radar Agent — controls radar sensors. Sees partial map. Specialises in airspace/fast-moving targets.">Radar Agent</span></div>
+        <div class="legend-item multi-legend" style="display:none"><span class="legend-dot agent-command"></span><span title="Command Agent — sees ALL sensors and targets. No fixed sensor type. Override authority: resolves conflicts when other agents clash. Costs -0.5 penalty per override.">Command Agent</span></div>
       </div>
+      <!-- INFO MODAL moved to fixed position outside map-container -->
       <div class="map-overlay" id="mapOverlay">
         <div class="overlay-icon">&#9728;</div>
         <div class="overlay-text">SELECT A MISSION TO BEGIN</div>
@@ -237,5 +239,32 @@
     <pre id="summaryText" style="color:#c8d4b8;font-family:'Courier New',monospace;font-size:0.82em;white-space:pre-wrap;line-height:1.6;margin:0;"></pre>
   </div>
 </div>
+<!-- INFO MODAL -->
+<div id="infoModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;align-items:center;justify-content:center;">
+  <div style="background:#F0EBCE;border:2px solid #AA8B56;border-radius:6px;padding:20px 24px;max-width:440px;width:90%;max-height:80vh;overflow-y:auto;font-family:'Courier New',monospace;color:#395144;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span style="font-weight:700;letter-spacing:0.12em;font-size:0.85em;color:#AA8B56;">LEGEND GUIDE</span>
+      <button onclick="document.getElementById('infoModal').style.display='none'" style="background:none;border:none;font-size:1.3em;cursor:pointer;color:#395144;">&times;</button>
+    </div>
+    <div style="font-size:0.72em;line-height:1.9;">
+      <div style="margin-bottom:8px;font-weight:700;color:#AA8B56;">SENSORS (circles on map)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#395144;margin-right:6px;"></span><b>Satellite</b> &mdash; Wide-area, long range. Best for strategic targets.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4E6C50;margin-right:6px;"></span><b>Drone</b> &mdash; Tactical, precise, short range. Best for kinetic targets.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#AA8B56;margin-right:6px;"></span><b>Radar</b> &mdash; Fast detection. Best for airspace targets.</div>
+      <div style="margin-top:10px;margin-bottom:8px;font-weight:700;color:#AA8B56;">THREATS (triangles on map)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#8B2E2E;margin-right:6px;"></span><b>HIGH (P3)</b> &mdash; Critical. Cover immediately. +2.0 reward if covered.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#A0522D;margin-right:6px;"></span><b>MED (P2)</b> &mdash; Moderate risk. +1.0 reward.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;background:#4E6C50;margin-right:6px;"></span><b>LOW (P1)</b> &mdash; Minor risk. +0.5 reward.</div>
+      <div style="margin-top:10px;margin-bottom:8px;font-weight:700;color:#AA8B56;">AGENTS (multi-agent mode only)</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563eb;margin-right:6px;"></span><b>Satellite Agent</b> &mdash; Controls satellite sensors. Sees partial map. Specialises in strategic targets.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#16a34a;margin-right:6px;"></span><b>Drone Agent</b> &mdash; Controls drone sensors. Sees partial map. Specialises in kinetic targets.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d97706;margin-right:6px;"></span><b>Radar Agent</b> &mdash; Controls radar sensors. Sees partial map. Specialises in airspace targets.</div>
+      <div><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9333ea;margin-right:6px;"></span><b>Command Agent</b> &mdash; Sees ALL sensors &amp; targets. No fixed sensor. Override authority &mdash; resolves ties. Costs &minus;0.5 per override.</div>
+      <div style="margin-top:10px;margin-bottom:8px;font-weight:700;color:#AA8B56;">ARCS (colored lines)</div>
+      <div>Each colored line = one agent&apos;s proposal. Color matches the agent. Disappears after 4 seconds.</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

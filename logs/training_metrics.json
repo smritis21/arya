@@ -1,47 +1,2002 @@
 [
   {
     "episode": 1,
-    "conflict_rate": 0.4149,
-    "coordination_score": 0.5851,
-    "reward": 66.5,
+    "conflict_rate": 0.4069,
+    "coordination_score": 0.5931,
+    "reward": -1.7839,
     "per_agent_rewards": {
-      "satellite": 57.0,
-      "drone": -7.0,
-      "radar": 3.5,
-      "command": 13.0
+      "satellite": 0.149,
+      "drone": 0.275,
+      "radar": 0.169,
+      "command": 0.309
     },
     "difficulty": 0.0,
     "phase": 1,
-    "conflict_injection": false
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
   },
   {
     "episode": 2,
-    "conflict_rate": 0.4149,
-    "coordination_score": 0.5851,
-    "reward": 66.5,
+    "conflict_rate": 0.396,
+    "coordination_score": 0.604,
+    "reward": -1.778,
     "per_agent_rewards": {
-      "satellite": 57.0,
-      "drone": -7.0,
-      "radar": 3.5,
-      "command": 13.0
+      "satellite": 1.014,
+      "drone": 0.085,
+      "radar": 0.366,
+      "command": 0.025
     },
-    "difficulty": 0.0,
+    "difficulty": 0.006,
     "phase": 1,
-    "conflict_injection": false
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
   },
   {
     "episode": 3,
-    "conflict_rate": 0.4149,
-    "coordination_score": 0.5851,
-    "reward": 66.5,
+    "conflict_rate": 0.3989,
+    "coordination_score": 0.6011,
+    "reward": -1.8513,
     "per_agent_rewards": {
-      "satellite": 57.0,
-      "drone": -7.0,
-      "radar": 3.5,
-      "command": 13.0
+      "satellite": 0.653,
+      "drone": 0.045,
+      "radar": 0.162,
+      "command": 0.282
     },
-    "difficulty": 0.0,
+    "difficulty": 0.012,
     "phase": 1,
-    "conflict_injection": false
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 4,
+    "conflict_rate": 0.3963,
+    "coordination_score": 0.6037,
+    "reward": -1.7991,
+    "per_agent_rewards": {
+      "satellite": 0.35,
+      "drone": 0.593,
+      "radar": 0.759,
+      "command": 0.018
+    },
+    "difficulty": 0.018,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 5,
+    "conflict_rate": 0.4181,
+    "coordination_score": 0.5819,
+    "reward": -1.7573,
+    "per_agent_rewards": {
+      "satellite": 0.813,
+      "drone": 0.332,
+      "radar": 0.095,
+      "command": 0.394
+    },
+    "difficulty": 0.024,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 6,
+    "conflict_rate": 0.3947,
+    "coordination_score": 0.6053,
+    "reward": -1.808,
+    "per_agent_rewards": {
+      "satellite": 0.226,
+      "drone": 0.103,
+      "radar": 0.799,
+      "command": 0.258
+    },
+    "difficulty": 0.03,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 7,
+    "conflict_rate": 0.3381,
+    "coordination_score": 0.6619,
+    "reward": -1.7084,
+    "per_agent_rewards": {
+      "satellite": 0.828,
+      "drone": 0.515,
+      "radar": 0.9,
+      "command": 0.156
+    },
+    "difficulty": 0.036,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 8,
+    "conflict_rate": 0.355,
+    "coordination_score": 0.645,
+    "reward": -1.7248,
+    "per_agent_rewards": {
+      "satellite": 0.933,
+      "drone": 0.601,
+      "radar": 0.793,
+      "command": 0.238
+    },
+    "difficulty": 0.042,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 9,
+    "conflict_rate": 0.301,
+    "coordination_score": 0.699,
+    "reward": -1.676,
+    "per_agent_rewards": {
+      "satellite": 0.132,
+      "drone": 0.197,
+      "radar": 0.208,
+      "command": 0.033
+    },
+    "difficulty": 0.048,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 10,
+    "conflict_rate": 0.2963,
+    "coordination_score": 0.7037,
+    "reward": -1.7271,
+    "per_agent_rewards": {
+      "satellite": 0.205,
+      "drone": 0.262,
+      "radar": 0.567,
+      "command": 0.153
+    },
+    "difficulty": 0.055,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 11,
+    "conflict_rate": 0.2986,
+    "coordination_score": 0.7014,
+    "reward": -1.712,
+    "per_agent_rewards": {
+      "satellite": 0.309,
+      "drone": 0.246,
+      "radar": 0.865,
+      "command": 0.265
+    },
+    "difficulty": 0.061,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 12,
+    "conflict_rate": 0.3031,
+    "coordination_score": 0.6969,
+    "reward": -1.6807,
+    "per_agent_rewards": {
+      "satellite": 0.259,
+      "drone": 0.7,
+      "radar": 0.084,
+      "command": 0.153
+    },
+    "difficulty": 0.067,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 13,
+    "conflict_rate": 0.2786,
+    "coordination_score": 0.7214,
+    "reward": -1.6267,
+    "per_agent_rewards": {
+      "satellite": 0.709,
+      "drone": 0.512,
+      "radar": 0.591,
+      "command": 0.332
+    },
+    "difficulty": 0.073,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 14,
+    "conflict_rate": 0.3002,
+    "coordination_score": 0.6998,
+    "reward": -1.6677,
+    "per_agent_rewards": {
+      "satellite": 0.313,
+      "drone": -0.001,
+      "radar": 0.232,
+      "command": 0.107
+    },
+    "difficulty": 0.079,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 15,
+    "conflict_rate": 0.3341,
+    "coordination_score": 0.6659,
+    "reward": -1.765,
+    "per_agent_rewards": {
+      "satellite": 1.061,
+      "drone": 0.871,
+      "radar": 0.256,
+      "command": 0.274
+    },
+    "difficulty": 0.085,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 16,
+    "conflict_rate": 0.3007,
+    "coordination_score": 0.6993,
+    "reward": -1.7236,
+    "per_agent_rewards": {
+      "satellite": 1.018,
+      "drone": 0.441,
+      "radar": 0.196,
+      "command": 0.105
+    },
+    "difficulty": 0.091,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 17,
+    "conflict_rate": 0.3093,
+    "coordination_score": 0.6907,
+    "reward": -1.6852,
+    "per_agent_rewards": {
+      "satellite": 0.353,
+      "drone": 0.556,
+      "radar": 0.819,
+      "command": 0.162
+    },
+    "difficulty": 0.097,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 18,
+    "conflict_rate": 0.278,
+    "coordination_score": 0.722,
+    "reward": -1.728,
+    "per_agent_rewards": {
+      "satellite": 1.102,
+      "drone": 0.493,
+      "radar": 0.023,
+      "command": 0.026
+    },
+    "difficulty": 0.103,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 19,
+    "conflict_rate": 0.2604,
+    "coordination_score": 0.7396,
+    "reward": -1.7337,
+    "per_agent_rewards": {
+      "satellite": 0.734,
+      "drone": 0.778,
+      "radar": 0.356,
+      "command": 0.033
+    },
+    "difficulty": 0.109,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 20,
+    "conflict_rate": 0.2606,
+    "coordination_score": 0.7394,
+    "reward": -1.6783,
+    "per_agent_rewards": {
+      "satellite": 1.084,
+      "drone": 0.499,
+      "radar": 0.891,
+      "command": 0.346
+    },
+    "difficulty": 0.115,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 21,
+    "conflict_rate": 0.2681,
+    "coordination_score": 0.7319,
+    "reward": -1.7513,
+    "per_agent_rewards": {
+      "satellite": 0.834,
+      "drone": 0.672,
+      "radar": 0.475,
+      "command": 0.117
+    },
+    "difficulty": 0.121,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 22,
+    "conflict_rate": 0.2638,
+    "coordination_score": 0.7362,
+    "reward": -1.6643,
+    "per_agent_rewards": {
+      "satellite": 0.194,
+      "drone": 0.401,
+      "radar": 0.37,
+      "command": 0.381
+    },
+    "difficulty": 0.127,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 23,
+    "conflict_rate": 0.2953,
+    "coordination_score": 0.7047,
+    "reward": -1.6405,
+    "per_agent_rewards": {
+      "satellite": 0.338,
+      "drone": 0.46,
+      "radar": 0.089,
+      "command": 0.362
+    },
+    "difficulty": 0.133,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 24,
+    "conflict_rate": 0.3225,
+    "coordination_score": 0.6775,
+    "reward": -1.6551,
+    "per_agent_rewards": {
+      "satellite": 0.378,
+      "drone": 0.602,
+      "radar": 0.523,
+      "command": 0.06
+    },
+    "difficulty": 0.139,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 25,
+    "conflict_rate": 0.3232,
+    "coordination_score": 0.6768,
+    "reward": -1.6861,
+    "per_agent_rewards": {
+      "satellite": 0.63,
+      "drone": 0.751,
+      "radar": 0.452,
+      "command": 0.003
+    },
+    "difficulty": 0.145,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 26,
+    "conflict_rate": 0.2942,
+    "coordination_score": 0.7058,
+    "reward": -1.7306,
+    "per_agent_rewards": {
+      "satellite": 0.125,
+      "drone": 0.914,
+      "radar": 0.811,
+      "command": 0.34
+    },
+    "difficulty": 0.152,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 27,
+    "conflict_rate": 0.2663,
+    "coordination_score": 0.7337,
+    "reward": -1.7077,
+    "per_agent_rewards": {
+      "satellite": 0.156,
+      "drone": 0.856,
+      "radar": 0.874,
+      "command": 0.039
+    },
+    "difficulty": 0.158,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 28,
+    "conflict_rate": 0.2452,
+    "coordination_score": 0.7548,
+    "reward": -1.6535,
+    "per_agent_rewards": {
+      "satellite": 0.148,
+      "drone": 0.724,
+      "radar": 0.679,
+      "command": 0.05
+    },
+    "difficulty": 0.164,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 29,
+    "conflict_rate": 0.1878,
+    "coordination_score": 0.8122,
+    "reward": -1.6296,
+    "per_agent_rewards": {
+      "satellite": 0.62,
+      "drone": 0.221,
+      "radar": 0.78,
+      "command": 0.165
+    },
+    "difficulty": 0.17,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 30,
+    "conflict_rate": 0.1731,
+    "coordination_score": 0.8269,
+    "reward": -1.6461,
+    "per_agent_rewards": {
+      "satellite": 0.615,
+      "drone": 0.691,
+      "radar": 0.113,
+      "command": 0.122
+    },
+    "difficulty": 0.176,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 31,
+    "conflict_rate": 0.2399,
+    "coordination_score": 0.7601,
+    "reward": -1.5539,
+    "per_agent_rewards": {
+      "satellite": 0.694,
+      "drone": 0.373,
+      "radar": 0.406,
+      "command": 0.035
+    },
+    "difficulty": 0.182,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 32,
+    "conflict_rate": 0.2331,
+    "coordination_score": 0.7669,
+    "reward": -1.7103,
+    "per_agent_rewards": {
+      "satellite": 0.437,
+      "drone": 0.567,
+      "radar": 0.158,
+      "command": 0.093
+    },
+    "difficulty": 0.188,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 33,
+    "conflict_rate": 0.3107,
+    "coordination_score": 0.6893,
+    "reward": -1.768,
+    "per_agent_rewards": {
+      "satellite": 0.75,
+      "drone": 0.224,
+      "radar": 0.847,
+      "command": 0.356
+    },
+    "difficulty": 0.194,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 34,
+    "conflict_rate": 0.3458,
+    "coordination_score": 0.6542,
+    "reward": -1.8012,
+    "per_agent_rewards": {
+      "satellite": 0.368,
+      "drone": 0.673,
+      "radar": 0.165,
+      "command": 0.069
+    },
+    "difficulty": 0.2,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 35,
+    "conflict_rate": 0.3503,
+    "coordination_score": 0.6497,
+    "reward": -1.6959,
+    "per_agent_rewards": {
+      "satellite": 0.665,
+      "drone": 0.448,
+      "radar": 0.709,
+      "command": 0.327
+    },
+    "difficulty": 0.206,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 36,
+    "conflict_rate": 0.3434,
+    "coordination_score": 0.6566,
+    "reward": -1.7808,
+    "per_agent_rewards": {
+      "satellite": 0.22,
+      "drone": 0.43,
+      "radar": 0.369,
+      "command": 0.201
+    },
+    "difficulty": 0.212,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 37,
+    "conflict_rate": 0.2671,
+    "coordination_score": 0.7329,
+    "reward": -1.6602,
+    "per_agent_rewards": {
+      "satellite": 0.754,
+      "drone": 0.949,
+      "radar": 0.013,
+      "command": 0.16
+    },
+    "difficulty": 0.218,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 38,
+    "conflict_rate": 0.274,
+    "coordination_score": 0.726,
+    "reward": -1.6882,
+    "per_agent_rewards": {
+      "satellite": 0.953,
+      "drone": 0.221,
+      "radar": 0.112,
+      "command": 0.182
+    },
+    "difficulty": 0.224,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 39,
+    "conflict_rate": 0.1958,
+    "coordination_score": 0.8042,
+    "reward": -1.6406,
+    "per_agent_rewards": {
+      "satellite": 0.353,
+      "drone": 0.209,
+      "radar": 0.833,
+      "command": 0.174
+    },
+    "difficulty": 0.23,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 40,
+    "conflict_rate": 0.1622,
+    "coordination_score": 0.8378,
+    "reward": -1.5359,
+    "per_agent_rewards": {
+      "satellite": 0.588,
+      "drone": -0.019,
+      "radar": 0.883,
+      "command": 0.319
+    },
+    "difficulty": 0.236,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 41,
+    "conflict_rate": 0.1688,
+    "coordination_score": 0.8312,
+    "reward": -1.5137,
+    "per_agent_rewards": {
+      "satellite": 0.956,
+      "drone": 0.773,
+      "radar": 0.045,
+      "command": 0.176
+    },
+    "difficulty": 0.242,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 42,
+    "conflict_rate": 0.144,
+    "coordination_score": 0.856,
+    "reward": -1.6296,
+    "per_agent_rewards": {
+      "satellite": 0.471,
+      "drone": 0.015,
+      "radar": 0.286,
+      "command": 0.39
+    },
+    "difficulty": 0.248,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 43,
+    "conflict_rate": 0.1494,
+    "coordination_score": 0.8506,
+    "reward": -1.6163,
+    "per_agent_rewards": {
+      "satellite": 0.85,
+      "drone": 0.408,
+      "radar": 0.327,
+      "command": 0.377
+    },
+    "difficulty": 0.255,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 44,
+    "conflict_rate": 0.1331,
+    "coordination_score": 0.8669,
+    "reward": -1.4945,
+    "per_agent_rewards": {
+      "satellite": 0.579,
+      "drone": 0.637,
+      "radar": 0.028,
+      "command": 0.098
+    },
+    "difficulty": 0.261,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 45,
+    "conflict_rate": 0.1385,
+    "coordination_score": 0.8615,
+    "reward": -1.4938,
+    "per_agent_rewards": {
+      "satellite": 0.602,
+      "drone": 0.46,
+      "radar": 0.621,
+      "command": 0.002
+    },
+    "difficulty": 0.267,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 46,
+    "conflict_rate": 0.1861,
+    "coordination_score": 0.8139,
+    "reward": -1.5765,
+    "per_agent_rewards": {
+      "satellite": 0.555,
+      "drone": 0.794,
+      "radar": 0.052,
+      "command": 0.373
+    },
+    "difficulty": 0.273,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 47,
+    "conflict_rate": 0.2083,
+    "coordination_score": 0.7917,
+    "reward": -1.6784,
+    "per_agent_rewards": {
+      "satellite": 0.273,
+      "drone": 0.565,
+      "radar": 0.595,
+      "command": 0.095
+    },
+    "difficulty": 0.279,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 48,
+    "conflict_rate": 0.1915,
+    "coordination_score": 0.8085,
+    "reward": -1.6933,
+    "per_agent_rewards": {
+      "satellite": 0.983,
+      "drone": 0.22,
+      "radar": 0.518,
+      "command": 0.251
+    },
+    "difficulty": 0.285,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 49,
+    "conflict_rate": 0.225,
+    "coordination_score": 0.775,
+    "reward": -1.6667,
+    "per_agent_rewards": {
+      "satellite": 0.667,
+      "drone": 0.489,
+      "radar": 0.851,
+      "command": 0.082
+    },
+    "difficulty": 0.291,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 50,
+    "conflict_rate": 0.2845,
+    "coordination_score": 0.7155,
+    "reward": -1.6404,
+    "per_agent_rewards": {
+      "satellite": 0.313,
+      "drone": 0.355,
+      "radar": 0.582,
+      "command": 0.117
+    },
+    "difficulty": 0.297,
+    "phase": 1,
+    "conflict_injection": false,
+    "targets_range": [
+      2,
+      3
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 51,
+    "conflict_rate": 0.2514,
+    "coordination_score": 0.7486,
+    "reward": -1.7063,
+    "per_agent_rewards": {
+      "satellite": 0.849,
+      "drone": 0.05,
+      "radar": 0.385,
+      "command": 0.404
+    },
+    "difficulty": 0.303,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 52,
+    "conflict_rate": 0.2835,
+    "coordination_score": 0.7165,
+    "reward": -1.5994,
+    "per_agent_rewards": {
+      "satellite": 0.133,
+      "drone": 0.161,
+      "radar": 0.165,
+      "command": 0.365
+    },
+    "difficulty": 0.309,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 53,
+    "conflict_rate": 0.262,
+    "coordination_score": 0.738,
+    "reward": -1.6197,
+    "per_agent_rewards": {
+      "satellite": 0.946,
+      "drone": 0.323,
+      "radar": 0.063,
+      "command": 0.328
+    },
+    "difficulty": 0.315,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 54,
+    "conflict_rate": 0.2497,
+    "coordination_score": 0.7503,
+    "reward": -1.6499,
+    "per_agent_rewards": {
+      "satellite": 0.689,
+      "drone": 0.949,
+      "radar": 0.566,
+      "command": 0.001
+    },
+    "difficulty": 0.321,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 55,
+    "conflict_rate": 0.297,
+    "coordination_score": 0.703,
+    "reward": -1.6336,
+    "per_agent_rewards": {
+      "satellite": 0.371,
+      "drone": 0.621,
+      "radar": 0.847,
+      "command": 0.05
+    },
+    "difficulty": 0.327,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 56,
+    "conflict_rate": 0.2693,
+    "coordination_score": 0.7307,
+    "reward": -1.7353,
+    "per_agent_rewards": {
+      "satellite": 0.214,
+      "drone": 0.539,
+      "radar": 0.206,
+      "command": 0.25
+    },
+    "difficulty": 0.333,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 57,
+    "conflict_rate": 0.2281,
+    "coordination_score": 0.7719,
+    "reward": -1.6283,
+    "per_agent_rewards": {
+      "satellite": 0.274,
+      "drone": 0.59,
+      "radar": 0.171,
+      "command": 0.191
+    },
+    "difficulty": 0.339,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 58,
+    "conflict_rate": 0.2352,
+    "coordination_score": 0.7648,
+    "reward": -1.5876,
+    "per_agent_rewards": {
+      "satellite": 0.902,
+      "drone": 0.037,
+      "radar": 0.32,
+      "command": 0.101
+    },
+    "difficulty": 0.345,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 59,
+    "conflict_rate": 0.243,
+    "coordination_score": 0.757,
+    "reward": -1.7213,
+    "per_agent_rewards": {
+      "satellite": 0.874,
+      "drone": 0.619,
+      "radar": 0.192,
+      "command": 0.303
+    },
+    "difficulty": 0.352,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 60,
+    "conflict_rate": 0.1911,
+    "coordination_score": 0.8089,
+    "reward": -1.623,
+    "per_agent_rewards": {
+      "satellite": 0.496,
+      "drone": -0.036,
+      "radar": -0.019,
+      "command": 0.348
+    },
+    "difficulty": 0.358,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 61,
+    "conflict_rate": 0.2001,
+    "coordination_score": 0.7999,
+    "reward": -1.5685,
+    "per_agent_rewards": {
+      "satellite": 0.595,
+      "drone": 0.774,
+      "radar": 0.475,
+      "command": 0.047
+    },
+    "difficulty": 0.364,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 62,
+    "conflict_rate": 0.2122,
+    "coordination_score": 0.7878,
+    "reward": -1.6946,
+    "per_agent_rewards": {
+      "satellite": 0.401,
+      "drone": 0.873,
+      "radar": 0.72,
+      "command": 0.348
+    },
+    "difficulty": 0.37,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 63,
+    "conflict_rate": 0.2051,
+    "coordination_score": 0.7949,
+    "reward": -1.573,
+    "per_agent_rewards": {
+      "satellite": 0.261,
+      "drone": 0.19,
+      "radar": -0.004,
+      "command": 0.301
+    },
+    "difficulty": 0.376,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 64,
+    "conflict_rate": 0.2124,
+    "coordination_score": 0.7876,
+    "reward": -1.5773,
+    "per_agent_rewards": {
+      "satellite": 0.458,
+      "drone": 0.562,
+      "radar": 0.049,
+      "command": 0.361
+    },
+    "difficulty": 0.382,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 65,
+    "conflict_rate": 0.2458,
+    "coordination_score": 0.7542,
+    "reward": -1.5823,
+    "per_agent_rewards": {
+      "satellite": 1.03,
+      "drone": 0.754,
+      "radar": 0.777,
+      "command": -0.0
+    },
+    "difficulty": 0.388,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 66,
+    "conflict_rate": 0.2294,
+    "coordination_score": 0.7706,
+    "reward": -1.6021,
+    "per_agent_rewards": {
+      "satellite": 0.393,
+      "drone": 0.879,
+      "radar": 0.703,
+      "command": 0.338
+    },
+    "difficulty": 0.394,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 67,
+    "conflict_rate": 0.2124,
+    "coordination_score": 0.7876,
+    "reward": -1.5897,
+    "per_agent_rewards": {
+      "satellite": 0.323,
+      "drone": 0.732,
+      "radar": 0.006,
+      "command": 0.34
+    },
+    "difficulty": 0.4,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 68,
+    "conflict_rate": 0.2233,
+    "coordination_score": 0.7767,
+    "reward": -1.5814,
+    "per_agent_rewards": {
+      "satellite": 0.276,
+      "drone": 0.759,
+      "radar": 0.356,
+      "command": 0.112
+    },
+    "difficulty": 0.406,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 69,
+    "conflict_rate": 0.2241,
+    "coordination_score": 0.7759,
+    "reward": -1.5909,
+    "per_agent_rewards": {
+      "satellite": 0.284,
+      "drone": -0.031,
+      "radar": 0.091,
+      "command": 0.122
+    },
+    "difficulty": 0.412,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 70,
+    "conflict_rate": 0.242,
+    "coordination_score": 0.758,
+    "reward": -1.5792,
+    "per_agent_rewards": {
+      "satellite": 1.02,
+      "drone": 0.221,
+      "radar": 0.536,
+      "command": 0.149
+    },
+    "difficulty": 0.418,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 71,
+    "conflict_rate": 0.2086,
+    "coordination_score": 0.7914,
+    "reward": -1.5593,
+    "per_agent_rewards": {
+      "satellite": 0.582,
+      "drone": 0.876,
+      "radar": 0.005,
+      "command": 0.375
+    },
+    "difficulty": 0.424,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 72,
+    "conflict_rate": 0.2172,
+    "coordination_score": 0.7828,
+    "reward": -1.6864,
+    "per_agent_rewards": {
+      "satellite": 1.053,
+      "drone": 0.238,
+      "radar": 0.03,
+      "command": 0.176
+    },
+    "difficulty": 0.43,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 73,
+    "conflict_rate": 0.1981,
+    "coordination_score": 0.8019,
+    "reward": -1.5972,
+    "per_agent_rewards": {
+      "satellite": 0.373,
+      "drone": 0.553,
+      "radar": 0.411,
+      "command": 0.146
+    },
+    "difficulty": 0.436,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 74,
+    "conflict_rate": 0.2382,
+    "coordination_score": 0.7618,
+    "reward": -1.6202,
+    "per_agent_rewards": {
+      "satellite": 0.322,
+      "drone": 0.662,
+      "radar": -0.093,
+      "command": 0.365
+    },
+    "difficulty": 0.442,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 75,
+    "conflict_rate": 0.2311,
+    "coordination_score": 0.7689,
+    "reward": -1.6251,
+    "per_agent_rewards": {
+      "satellite": 0.788,
+      "drone": 0.697,
+      "radar": 0.577,
+      "command": 0.141
+    },
+    "difficulty": 0.448,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 76,
+    "conflict_rate": 0.2074,
+    "coordination_score": 0.7926,
+    "reward": -1.7063,
+    "per_agent_rewards": {
+      "satellite": 0.761,
+      "drone": 0.308,
+      "radar": 0.24,
+      "command": 0.344
+    },
+    "difficulty": 0.455,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 77,
+    "conflict_rate": 0.2189,
+    "coordination_score": 0.7811,
+    "reward": -1.6086,
+    "per_agent_rewards": {
+      "satellite": 0.363,
+      "drone": 0.26,
+      "radar": 0.311,
+      "command": 0.154
+    },
+    "difficulty": 0.461,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 78,
+    "conflict_rate": 0.212,
+    "coordination_score": 0.788,
+    "reward": -1.6827,
+    "per_agent_rewards": {
+      "satellite": 0.216,
+      "drone": 0.392,
+      "radar": 0.861,
+      "command": 0.273
+    },
+    "difficulty": 0.467,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 79,
+    "conflict_rate": 0.2421,
+    "coordination_score": 0.7579,
+    "reward": -1.5918,
+    "per_agent_rewards": {
+      "satellite": 0.673,
+      "drone": 0.247,
+      "radar": 0.446,
+      "command": -0.009
+    },
+    "difficulty": 0.473,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 80,
+    "conflict_rate": 0.2637,
+    "coordination_score": 0.7363,
+    "reward": -1.6966,
+    "per_agent_rewards": {
+      "satellite": 0.524,
+      "drone": 0.555,
+      "radar": 0.579,
+      "command": 0.19
+    },
+    "difficulty": 0.479,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 81,
+    "conflict_rate": 0.2485,
+    "coordination_score": 0.7515,
+    "reward": -1.6855,
+    "per_agent_rewards": {
+      "satellite": 0.304,
+      "drone": 0.445,
+      "radar": 0.823,
+      "command": 0.321
+    },
+    "difficulty": 0.485,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 82,
+    "conflict_rate": 0.2728,
+    "coordination_score": 0.7272,
+    "reward": -1.7428,
+    "per_agent_rewards": {
+      "satellite": 0.195,
+      "drone": 0.503,
+      "radar": 0.569,
+      "command": 0.143
+    },
+    "difficulty": 0.491,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 83,
+    "conflict_rate": 0.3086,
+    "coordination_score": 0.6914,
+    "reward": -1.6528,
+    "per_agent_rewards": {
+      "satellite": 0.83,
+      "drone": 0.636,
+      "radar": 0.138,
+      "command": 0.078
+    },
+    "difficulty": 0.497,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 84,
+    "conflict_rate": 0.3251,
+    "coordination_score": 0.6749,
+    "reward": -1.7936,
+    "per_agent_rewards": {
+      "satellite": 0.373,
+      "drone": 0.477,
+      "radar": 0.798,
+      "command": 0.044
+    },
+    "difficulty": 0.503,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 85,
+    "conflict_rate": 0.3543,
+    "coordination_score": 0.6457,
+    "reward": -1.7449,
+    "per_agent_rewards": {
+      "satellite": 0.74,
+      "drone": 0.183,
+      "radar": 0.633,
+      "command": 0.207
+    },
+    "difficulty": 0.509,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 86,
+    "conflict_rate": 0.2816,
+    "coordination_score": 0.7184,
+    "reward": -1.7347,
+    "per_agent_rewards": {
+      "satellite": 0.763,
+      "drone": -0.009,
+      "radar": 0.685,
+      "command": 0.316
+    },
+    "difficulty": 0.515,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 87,
+    "conflict_rate": 0.25,
+    "coordination_score": 0.75,
+    "reward": -1.7192,
+    "per_agent_rewards": {
+      "satellite": 0.527,
+      "drone": 0.157,
+      "radar": 0.888,
+      "command": 0.213
+    },
+    "difficulty": 0.521,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 88,
+    "conflict_rate": 0.1768,
+    "coordination_score": 0.8232,
+    "reward": -1.6907,
+    "per_agent_rewards": {
+      "satellite": 0.341,
+      "drone": 0.822,
+      "radar": 0.379,
+      "command": 0.323
+    },
+    "difficulty": 0.527,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 89,
+    "conflict_rate": 0.1346,
+    "coordination_score": 0.8654,
+    "reward": -1.5544,
+    "per_agent_rewards": {
+      "satellite": 1.032,
+      "drone": 0.531,
+      "radar": 0.839,
+      "command": 0.343
+    },
+    "difficulty": 0.533,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 90,
+    "conflict_rate": 0.139,
+    "coordination_score": 0.861,
+    "reward": -1.5257,
+    "per_agent_rewards": {
+      "satellite": 0.753,
+      "drone": 0.432,
+      "radar": 0.712,
+      "command": 0.202
+    },
+    "difficulty": 0.539,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 91,
+    "conflict_rate": 0.1289,
+    "coordination_score": 0.8711,
+    "reward": -1.4933,
+    "per_agent_rewards": {
+      "satellite": 0.766,
+      "drone": 0.393,
+      "radar": 0.133,
+      "command": 0.078
+    },
+    "difficulty": 0.545,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 92,
+    "conflict_rate": 0.1437,
+    "coordination_score": 0.8563,
+    "reward": -1.548,
+    "per_agent_rewards": {
+      "satellite": 0.808,
+      "drone": 0.455,
+      "radar": 0.514,
+      "command": 0.096
+    },
+    "difficulty": 0.552,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 93,
+    "conflict_rate": 0.1367,
+    "coordination_score": 0.8633,
+    "reward": -1.6507,
+    "per_agent_rewards": {
+      "satellite": 0.363,
+      "drone": 0.234,
+      "radar": 0.232,
+      "command": 0.214
+    },
+    "difficulty": 0.558,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 94,
+    "conflict_rate": 0.1572,
+    "coordination_score": 0.8428,
+    "reward": -1.6541,
+    "per_agent_rewards": {
+      "satellite": 0.31,
+      "drone": 0.657,
+      "radar": 0.62,
+      "command": 0.024
+    },
+    "difficulty": 0.564,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 95,
+    "conflict_rate": 0.1907,
+    "coordination_score": 0.8093,
+    "reward": -1.6242,
+    "per_agent_rewards": {
+      "satellite": 0.611,
+      "drone": 0.371,
+      "radar": 0.113,
+      "command": 0.163
+    },
+    "difficulty": 0.57,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 96,
+    "conflict_rate": 0.1684,
+    "coordination_score": 0.8316,
+    "reward": -1.5471,
+    "per_agent_rewards": {
+      "satellite": 0.626,
+      "drone": 0.629,
+      "radar": 0.744,
+      "command": 0.292
+    },
+    "difficulty": 0.576,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 97,
+    "conflict_rate": 0.2161,
+    "coordination_score": 0.7839,
+    "reward": -1.6335,
+    "per_agent_rewards": {
+      "satellite": 0.078,
+      "drone": 0.309,
+      "radar": 0.662,
+      "command": 0.337
+    },
+    "difficulty": 0.582,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 98,
+    "conflict_rate": 0.2225,
+    "coordination_score": 0.7775,
+    "reward": -1.5443,
+    "per_agent_rewards": {
+      "satellite": 0.46,
+      "drone": 0.68,
+      "radar": 0.432,
+      "command": 0.227
+    },
+    "difficulty": 0.588,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 99,
+    "conflict_rate": 0.2002,
+    "coordination_score": 0.7998,
+    "reward": -1.6641,
+    "per_agent_rewards": {
+      "satellite": 0.302,
+      "drone": 0.402,
+      "radar": -0.055,
+      "command": 0.134
+    },
+    "difficulty": 0.594,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
+  },
+  {
+    "episode": 100,
+    "conflict_rate": 0.1873,
+    "coordination_score": 0.8127,
+    "reward": -1.5932,
+    "per_agent_rewards": {
+      "satellite": 0.462,
+      "drone": 0.111,
+      "radar": 0.366,
+      "command": 0.042
+    },
+    "difficulty": 0.6,
+    "phase": 2,
+    "conflict_injection": true,
+    "targets_range": [
+      3,
+      5
+    ],
+    "freeze_agent": null
   }
 ]

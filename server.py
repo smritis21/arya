@@ -462,11 +462,17 @@ def grade():
 @app.post("/reset_multi")
 def reset_multi():
     global mx_obs
-    body      = request.get_json(silent=True) or {}
-    seed      = body.get("seed") or _random.randint(1, 99999)
-    max_steps = body.get("max_steps", 10)
-    mx_env.seed      = seed
-    mx_env.max_steps = max_steps
+    body             = request.get_json(silent=True) or {}
+    seed             = body.get("seed") or _random.randint(1, 99999)
+    max_steps        = body.get("max_steps", 10)
+    density_factor   = body.get("density_factor", 1.5)
+    failure_prob     = body.get("failure_prob", 0.0)
+    conflict_injection = body.get("conflict_injection", False)
+    mx_env.seed              = seed
+    mx_env.max_steps         = max_steps
+    mx_env.density_factor    = density_factor
+    mx_env.failure_prob      = failure_prob
+    mx_env.conflict_injection = conflict_injection
     mx_obs = mx_env.reset()
     _negotiation.reset()
     _reward_eng.reset()
