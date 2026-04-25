@@ -168,36 +168,80 @@ def run_deterministic_eval(
             total_rewards: dict[str, float] = {aid: 0.0 for aid in agent_ids}
             done         = False
 
-            rng = __import__("random").Random(seed)
+            # Build agent lookup by agent_id if trained agents were passed
+            agent_map: dict = {}
+            if agents is not None:
+                for a in agents:
+                    aid = getattr(a, "agent_id", None)
+                    if aid:
+                        agent_map[aid] = a
+                if verbose:
+                    print("[Eval] evaluating trained policy")
+            else:
+                if verbose:
+                    print("[Eval] greedy baseline (no trained agents passed)")
 
             while not done:
-                # Greedy proposals per agent
                 from env.multiagent import Proposal
+                from env.models import AgentObservation as ModelAgentObs, Sensor as ModelSensor, Target as ModelTarget
                 proposals = []
-                used_sensors: set[str] = set()
-                used_targets: set[str] = set()
-                for agent_id in agent_ids:
-                    agent_obs = obs_map[agent_id]
-                    my_sensors = [
-                        s for s in agent_obs.sensors
-                        if s["available"] and s["id"] not in used_sensors
-                        and (agent_id == "command" or s["type"] == agent_id)
-                    ]
-                    targets = sorted(
-                        [t for t in agent_obs.targets if t["active"]],
-                        key=lambda t: -t["priority"]
-                    )
-                    for sensor in my_sensors:
-                        for target in targets:
-                            if target["id"] not in used_targets:
-                                proposals.append(Proposal(
-                                    agent_id=agent_id,
-                                    sensor_id=sensor["id"],
-                                    target_id=target["id"]
-                                ))
-                                used_sensors.add(sensor["id"])
-                                used_targets.add(target["id"])
-                                break
+
+                if agent_map:
+                    # Use trained agent instances — observe then propose
+                    all_proposals_obj = []
+                    for canonical_id in ["satellite", "drone", "radar"]:
+                        agent = agent_map.get(canonical_id)
+                        if agent is None:
+                            continue
+                        agent_obs_raw = obs_map[canonical_id]
+                        model_obs = ModelAgentObs(
+                            agent_id=canonical_id, agent_type=canonical_id,
+                            sensors=[ModelSensor(**s) for s in agent_obs_raw.sensors],
+                            targets=[ModelTarget(**t) for t in agent_obs_raw.targets],
+                            timestep=agent_obs_raw.timestep, conflict_history=[],
+                        )
+                        agent.observe(model_obs)
+                        all_proposals_obj.extend(agent.propose())
+
+                    cmd_agent = agent_map.get("command")
+                    if cmd_agent:
+                        cmd_obs_raw = obs_map["command"]
+                        cmd_model_obs = ModelAgentObs(
+                            agent_id="command", agent_type="command",
+                            sensors=[ModelSensor(**s) for s in cmd_obs_raw.sensors],
+                            targets=[ModelTarget(**t) for t in cmd_obs_raw.targets],
+                            timestep=cmd_obs_raw.timestep, conflict_history=[],
+                        )
+                        cmd_agent.observe(cmd_model_obs, proposals=all_proposals_obj)
+                        all_proposals_obj.extend(cmd_agent.propose())
+
+                    proposals = all_proposals_obj
+                else:
+                    # Greedy fallback
+                    used_sensors: set[str] = set()
+                    used_targets: set[str] = set()
+                    for agent_id in agent_ids:
+                        agent_obs = obs_map[agent_id]
+                        my_sensors = [
+                            s for s in agent_obs.sensors
+                            if s["available"] and s["id"] not in used_sensors
+                            and (agent_id == "command" or s["type"] == agent_id)
+                        ]
+                        targets = sorted(
+                            [t for t in agent_obs.targets if t["active"]],
+                            key=lambda t: -t["priority"]
+                        )
+                        for sensor in my_sensors:
+                            for target in targets:
+                                if target["id"] not in used_targets:
+                                    proposals.append(Proposal(
+                                        agent_id=agent_id,
+                                        sensor_id=sensor["id"],
+                                        target_id=target["id"]
+                                    ))
+                                    used_sensors.add(sensor["id"])
+                                    used_targets.add(target["id"])
+                                    break
 
                 obs_map, step_r, done, info = env.step_multiagent(proposals)
                 for aid, r in step_r.items():

@@ -1,14 +1,13 @@
 """
-Arya-X Multi-Agent Environment
-Agents: satellite, drone, radar, command
-Each agent proposes assignments; ConflictResolver arbitrates; NegotiationLayer coordinates.
-Uses canonical interaction/ package for conflict detection, resolution, and negotiation.
+Arya-X Multi-Agent Environment — unified serving + training env.
+mode='multi': partial obs + noise (training). mode='single': full obs (server/inference).
 """
 import random
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from env.models import Sensor, Target, Action
 from env.dynamics import initialize_sensors, spawn_targets, spawn_targets_stochastic, apply_correlated_failures
+from env.world_model import add_observation_noise, apply_mask, get_priority_mapping
 from interaction import NegotiationLayer
 from interaction.reward import RewardEngine
 
@@ -18,6 +17,9 @@ AGENT_TYPES = ["satellite", "drone", "radar", "command"]
 PRIORITY_REWARD  = {3: 2.0, 2: 1.0, 1: 0.5}
 IDLE_PENALTY     = -2.0
 CONFLICT_PENALTY = -0.5
+
+# Stable per-agent salts for partial obs noise
+_AGENT_SALT = {"satellite": 1001, "drone": 2002, "radar": 3003, "command": 4004}
 
 
 @dataclass
@@ -61,15 +63,20 @@ class AryaXEnv:
     def __init__(self, max_steps: int = 10, seed: int = 42,
                  density_factor: float = 1.0, failure_prob: float = 0.0,
                  conflict_injection: bool = False,
-                 min_targets: int = 0, max_targets: int = 0):
+                 min_targets: int = 0, max_targets: int = 0,
+                 mode: str = 'multi'):
         self.max_steps        = max_steps
         self.seed             = seed
         self.density_factor   = density_factor
         self.failure_prob     = failure_prob
         self.conflict_injection = conflict_injection
-        # When non-zero, clamp spawned target count to [min_targets, max_targets]
         self.min_targets      = min_targets
         self.max_targets      = max_targets
+        # mode='multi': partial obs + noise (training)
+        # mode='single': full obs, no noise (server/inference backwards compat)
+        self.mode             = mode
+        self.episode_number   = 0
+        self._rng             = random.Random(seed)
         self.sensors:    List[Sensor] = []
         self.targets:    List[Target] = []
         self.current_step: int = 0
@@ -98,10 +105,12 @@ class AryaXEnv:
         return targets
 
     def reset(self) -> Dict[str, AgentObservation]:
-        self.sensors = initialize_sensors(self.seed)
+        self._rng = random.Random(self.seed)
+        # Scale sensor count with density: easy=3, medium=4, hard=5
+        num_sensors = max(3, min(5, int(self.density_factor * 0.9) + 2))
+        self.sensors = initialize_sensors(self.seed, num_sensors=num_sensors)
         if self.failure_prob > 0.0:
-            rng = random.Random(self.seed)
-            self.sensors = apply_correlated_failures(self.sensors, rng.randint(0, 9999), self.failure_prob)
+            self.sensors = apply_correlated_failures(self.sensors, self._rng.randint(0, 9999), self.failure_prob)
         self.targets = self._clamp_targets(
             spawn_targets_stochastic(step=0, seed=self.seed, density_factor=self.density_factor)
         )
@@ -110,6 +119,7 @@ class AryaXEnv:
         self._missed = []
         self.initial_sensor_count = len(self.sensors)
         self._agent_rewards = {a: 0.0 for a in AGENT_TYPES}
+        self.episode_number += 1
         self.negotiation.reset()
         self.reward_engine.reset()
         return self._build_observations()
@@ -118,18 +128,35 @@ class AryaXEnv:
         return self._build_observations()
 
     def _build_observations(self) -> Dict[str, AgentObservation]:
-        sensors_dict = [s.model_dump() for s in self.sensors]
-        targets_dict = [t.model_dump() for t in self.targets]
-        return {
-            agent: AgentObservation(
-                agent_id=agent,
-                agent_type=agent,
-                sensors=sensors_dict,
-                targets=targets_dict,
+        if self.mode == 'single':
+            # Full obs — no masking or noise (server/inference backwards compat)
+            sensors_dict = [s.model_dump() for s in self.sensors]
+            targets_dict = [t.model_dump() for t in self.targets]
+            return {
+                agent: AgentObservation(
+                    agent_id=agent, agent_type=agent,
+                    sensors=sensors_dict, targets=targets_dict,
+                    timestep=self.current_step,
+                )
+                for agent in AGENT_TYPES
+            }
+        # mode='multi': partial obs + noise per agent
+        priority_map = get_priority_mapping(self.episode_number)
+        obs = {}
+        for agent in AGENT_TYPES:
+            agent_sensors = [s for s in self.sensors if s.type == agent or agent == "command"]
+            masked_targets = apply_mask(self.targets, agent, agent_sensors)
+            rng = random.Random(self.seed + self.current_step + _AGENT_SALT.get(agent, 0))
+            noisy_targets = add_observation_noise(masked_targets, agent, rng)
+            drifted = [Target(id=t.id, priority=priority_map.get(t.priority, t.priority),
+                              active=t.active, type=t.type) for t in noisy_targets]
+            obs[agent] = AgentObservation(
+                agent_id=agent, agent_type=agent,
+                sensors=[s.model_dump() for s in agent_sensors],
+                targets=[t.model_dump() for t in drifted],
                 timestep=self.current_step,
             )
-            for agent in AGENT_TYPES
-        }
+        return obs
 
     def step_multiagent(
         self,
