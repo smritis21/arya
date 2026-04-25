@@ -552,10 +552,6 @@ def auto_multi():
 def ui():
     return render_template("dashboard.html")
 
-@app.get("/game")
-def game():
-    return render_template("game.html")
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
