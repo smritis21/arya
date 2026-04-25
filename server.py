@@ -557,6 +557,7 @@ def auto_multi():
         source = "greedy"
 
     proposals = _filter_proposals(proposals, mx_obs)
+    print(f"[DEBUG] filtered proposals: {[(p.agent_id, p.sensor_id, p.target_id) for p in proposals]}")
 
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
