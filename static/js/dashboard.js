@@ -303,6 +303,13 @@ function setMode(mode) {
   });
 
   addLog(`Switched to ${mode === 'multi' ? 'MULTI-AGENT' : 'SINGLE-AGENT'} mode`, 'log-neu');
+
+  if (mode === 'multi' && obsLoaded) {
+    const taskSteps = { 'Easy': 20, 'Medium': 40, 'Hard': 60 };
+    const taskSeeds = { 'Easy': 42, 'Medium': 7, 'Hard': 13 };
+    const taskThreats = { 'Easy': 'MONITORING', 'Medium': 'ELEVATED', 'Hard': 'CRITICAL' };
+    loadTask(taskSteps[currentTask] || 20, taskSeeds[currentTask] || 42, currentTask, taskThreats[currentTask] || 'MONITORING');
+  }
 }
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
@@ -657,7 +664,7 @@ async function runAll() {
 
 // ── Multi-agent actions ───────────────────────────────────────────────────────
 async function autoMultiStep() {
-  if (!obsLoaded) return addLog('Load a mission first', 'log-neg');
+  if (!obsLoaded) return;
   if (mxDone) return addLog('Episode complete — reload mission', 'log-neg');
 
   const r = await api('POST', '/auto_multi');
