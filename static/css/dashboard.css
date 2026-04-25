@@ -458,6 +458,7 @@ body {
   gap: 4px;
 }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.68em; color: var(--text); }
+.legend-item span[title] { cursor: help; border-bottom: 1px dotted var(--border); }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .legend-dot.sat { background: var(--accent); }
 .legend-dot.drone { background: var(--green); }

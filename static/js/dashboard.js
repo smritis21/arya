@@ -30,9 +30,13 @@ const SENSOR_POS = {
   S3: [13.0, 80.3],   // Chennai
   S4: [22.5, 88.3],   // Kolkata
   S5: [17.4, 78.5],   // Hyderabad
+  S6: [26.9, 75.8],   // Jaipur
+  S7: [23.0, 72.6],   // Ahmedabad
+  S8: [12.9, 74.8],   // Mangalore
 };
 const CITY_NAMES = {
-  S1: 'Delhi', S2: 'Mumbai', S3: 'Chennai', S4: 'Kolkata', S5: 'Hyderabad'
+  S1: 'Delhi', S2: 'Mumbai', S3: 'Chennai', S4: 'Kolkata', S5: 'Hyderabad',
+  S6: 'Jaipur', S7: 'Ahmedabad', S8: 'Mangalore'
 };
 const customSensorPos = {};    // id → [lat, lon] when dragged
 
@@ -255,7 +259,7 @@ function setMode(mode) {
   document.getElementById('conflictPanel').style.display   = mode === 'multi'  ? '' : 'none';
 
   document.querySelectorAll('.multi-legend').forEach(el => {
-    el.style.display = mode === 'multi' ? '' : 'none';
+    el.style.display = mode === 'multi' ? 'flex' : 'none';
   });
 
   addLog(`Switched to ${mode === 'multi' ? 'MULTI-AGENT' : 'SINGLE-AGENT'} mode`, 'log-neu');
@@ -479,13 +483,21 @@ async function loadTask(steps, seed, name, threatLevel) {
 
   let obs;
   if (currentMode === 'multi') {
-    obs = await api('POST', '/reset_multi', { max_steps: steps });
+    const densityMap = { 20: 1.5, 40: 2.5, 60: 4.0 };
+    const failureMap = { 20: 0.0, 40: 0.05, 60: 0.15 };
+    obs = await api('POST', '/reset_multi', {
+      max_steps: steps,
+      seed: seed,
+      density_factor: densityMap[steps] || 1.5,
+      failure_prob: failureMap[steps] || 0.0,
+      conflict_injection: steps >= 40,
+    });
     currentSeed = obs.seed || seed;
-    // Use the first agent's observation for rendering sensors/targets
-    const firstAgentObs = obs.observations ? obs.observations['satellite'] : null;
-    if (firstAgentObs) {
-      renderSensors(firstAgentObs.sensors);
-      renderEnvTargets(firstAgentObs.targets);
+    // Use command agent obs — it sees ALL sensors and ALL targets
+    const cmdObs = obs.observations ? obs.observations['command'] : null;
+    if (cmdObs) {
+      renderSensors(cmdObs.sensors);
+      renderEnvTargets(cmdObs.targets);
     }
     addLog(`[MULTI] Mission started: ${name} — 4 agents active, ${steps} steps`, 'log-neu');
   } else {
@@ -569,15 +581,16 @@ async function autoMultiStep() {
 
   // Use first agent's observation for display
   const agentObs = r.observations;
-  const firstObs = agentObs ? agentObs['satellite'] : null;
+  // Always use command obs — sees all sensors + all targets
+  const cmdObs = agentObs ? agentObs['command'] : null;
 
   // Collect conflict target IDs for overlay
   const conflictTargetIds = (r.conflicts || [])
     .filter(c => c.target_id).map(c => c.target_id);
 
-  if (firstObs) {
-    renderSensors(firstObs.sensors);
-    renderEnvTargets(firstObs.targets, conflictTargetIds);
+  if (cmdObs) {
+    renderSensors(cmdObs.sensors);
+    renderEnvTargets(cmdObs.targets, conflictTargetIds);
   }
 
   // Update step / stats
