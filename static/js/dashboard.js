@@ -12,7 +12,11 @@ let mxDone = false;
 let mxStepCount = 0;
 let agentRewardsCumulative = { satellite: 0, drone: 0, radar: 0, command: 0 };
 let conflictLog = [];
-let activeThreats = []; // FIX 6: Global threat tracker
+let activeThreats = [];
+
+// Training comparison baseline
+let baselineMetrics = null;   // captured from first (greedy) episode
+let currentEpisodeN = 0;      // episode counter per task load
 
 // Leaflet map + layer references
 let map = null;
@@ -172,20 +176,29 @@ function renderSensors(data) {
 function renderEnvTargets(data, conflictTargetIds) {
   const conflictSet = new Set(conflictTargetIds || []);
 
-  // Update global tracking
+  // Build set of currently active target IDs from server response
+  const activeFromServer = new Set(
+    data.filter(t => t.active !== false).map(t => t.id)
+  );
+
+  // Update metadata for all incoming targets
   data.forEach(t => {
-    if (!activeThreats.find(x => x.id === t.id)) {
-        activeThreats.push(t);
-    }
     targetMeta[t.id] = { priority: t.priority };
     if (!allTargetPos[t.id]) getTargetPos(t.id);
   });
 
-  // FIX 6: Only remove threat when covered
-  activeThreats = activeThreats.filter(t => !t.isCovered);
+  // Remove markers for targets no longer active
+  Object.keys(targetMarkers).forEach(id => {
+    if (!activeFromServer.has(id)) {
+      map.removeLayer(targetMarkers[id]);
+      delete targetMarkers[id];
+    }
+  });
 
-  // Update markers
-  activeThreats.forEach(t => {
+  // Add or update markers for active targets
+  activeFromServer.forEach(id => {
+    const t = data.find(x => x.id === id);
+    if (!t) return;
     const pos = getTargetPos(t.id);
     const hasConflict = conflictSet.has(t.id);
     if (targetMarkers[t.id]) {
@@ -198,16 +211,9 @@ function renderEnvTargets(data, conflictTargetIds) {
     }
   });
 
-  // Cleanup old markers
-  const activeIds = new Set(activeThreats.map(t => t.id));
-  Object.keys(targetMarkers).forEach(id => {
-    if (!activeIds.has(id)) {
-      map.removeLayer(targetMarkers[id]);
-      delete targetMarkers[id];
-    }
-  });
-
-  envTargets = activeThreats;
+  // Sync envTargets to only active ones
+  envTargets = data.filter(t => activeFromServer.has(t.id));
+  activeThreats = [...envTargets];
   refreshThreatPanel();
 }
 
@@ -380,10 +386,14 @@ function updateStats(reward, info) {
 }
 
 function updateMultiStats(stepRewards, agentRewards, conflictRate, conflicts, step) {
-  // Cumulative agent rewards
-  Object.keys(agentRewards).forEach(a => {
-    agentRewardsCumulative[a] = agentRewards[a];
-  });
+  // Cumulative agent rewards — use server cumulative if available, else accumulate locally
+  const rewardSource = (agentRewards && Object.values(agentRewards).some(v => v !== 0))
+    ? agentRewards : null;
+  if (rewardSource) {
+    Object.keys(rewardSource).forEach(a => { agentRewardsCumulative[a] = rewardSource[a]; });
+  } else {
+    Object.keys(stepRewards).forEach(a => { agentRewardsCumulative[a] = (agentRewardsCumulative[a] || 0) + (stepRewards[a] || 0); });
+  }
   document.getElementById('rewardSatellite').textContent = agentRewardsCumulative.satellite.toFixed(1);
   document.getElementById('rewardDrone').textContent     = agentRewardsCumulative.drone.toFixed(1);
   document.getElementById('rewardRadar').textContent     = agentRewardsCumulative.radar.toFixed(1);
@@ -454,10 +464,34 @@ VERDICT: ${verdict}`;
   document.getElementById('summaryModal').style.display = 'flex';
 }
 
-function showMultiSummary(info) {
-  const ar = agentRewardsCumulative;
+function showMultiSummary(info, conflictRateOverride, agentRewardsOverride) {
+  const ar = agentRewardsOverride || agentRewardsCumulative;
   const totalCumReward = Object.values(ar).reduce((a, b) => a + b, 0);
-  const conflictRateFinal = info.conflict_rate || 0;
+  const conflictRateFinal = conflictRateOverride ?? info.conflict_rate ?? 0;
+  const coordScore = parseFloat((1.0 - conflictRateFinal).toFixed(3));
+
+  currentEpisodeN++;
+  if (currentEpisodeN === 1) {
+    baselineMetrics = { conflictRate: conflictRateFinal, reward: totalCumReward, coord: coordScore };
+  }
+
+  // Use hardcoded greedy baseline for comparison (from README benchmarks)
+  const GREEDY = { Easy: { conflictRate: 0.55, reward: -7.0, coord: 0.45 }, Medium: { conflictRate: 0.65, reward: -15.0, coord: 0.35 }, Hard: { conflictRate: 0.75, reward: -30.0, coord: 0.25 } };
+  const bl = (currentEpisodeN > 1 && baselineMetrics) ? baselineMetrics : (GREEDY[currentTask] || GREEDY.Easy);
+
+  const panel = document.getElementById('trainingComparison');
+  if (panel) {
+    panel.style.display = 'block';
+    document.getElementById('cmpConflictBefore').textContent = bl.conflictRate.toFixed(3);
+    document.getElementById('cmpConflictAfter').textContent  = conflictRateFinal.toFixed(3);
+    document.getElementById('cmpRewardBefore').textContent   = bl.reward.toFixed(1);
+    document.getElementById('cmpRewardAfter').textContent    = totalCumReward.toFixed(1);
+    document.getElementById('cmpCoordBefore').textContent    = bl.coord.toFixed(3);
+    document.getElementById('cmpCoordAfter').textContent     = coordScore.toFixed(3);
+    document.getElementById('cmpConflictAfter').style.color  = conflictRateFinal < bl.conflictRate ? '#16a34a' : '#e11d48';
+    document.getElementById('cmpRewardAfter').style.color    = totalCumReward > bl.reward ? '#16a34a' : '#e11d48';
+    document.getElementById('cmpCoordAfter').style.color     = coordScore > bl.coord ? '#16a34a' : '#e11d48';
+  }
 
   const assignmentLines = (info.assignments || []).map((a, i) =>
     `Step ${i + 1}: [${(a.agent || '?').toUpperCase()}] ${sensorLabel(a.sensor)} → ${targetLabel(a.target)}`
@@ -469,6 +503,12 @@ function showMultiSummary(info) {
 
   const agentLines = Object.entries(ar).map(([a, r]) => `  ${a.padEnd(12)}: ${r.toFixed(2)}`).join('\n');
 
+  const comparisonLines = `
+TRAINING IMPACT (Greedy Baseline → Current):
+  Conflict Rate : ${bl.conflictRate.toFixed(3)} → ${conflictRateFinal.toFixed(3)}  ${conflictRateFinal < bl.conflictRate ? '▼ IMPROVED' : '▲ WORSE'}
+  Total Reward  : ${bl.reward.toFixed(1)} → ${totalCumReward.toFixed(1)}  ${totalCumReward > bl.reward ? '▲ IMPROVED' : '▼ WORSE'}
+  Coord Score   : ${bl.coord.toFixed(3)} → ${coordScore.toFixed(3)}  ${coordScore > bl.coord ? '▲ IMPROVED' : '▼ WORSE'}`;
+
   const summary = `EPISODE SUMMARY — MULTI-AGENT MODE
 ${'─'.repeat(50)}
 Mission: ${currentTask.toUpperCase()} | Agents: satellite, drone, radar, command
@@ -479,6 +519,7 @@ ${agentLines}
 
 TOTAL REWARD: ${totalCumReward.toFixed(2)}
 CONFLICT RATE: ${conflictRateFinal.toFixed(4)} (${(conflictRateFinal * 100).toFixed(1)}% of steps had conflicts)
+${comparisonLines}
 
 ASSIGNMENTS:
 ${assignmentLines}
@@ -499,6 +540,10 @@ async function loadTask(steps, seed, name, threatLevel) {
   envTargets = [];
   agentRewardsCumulative = { satellite: 0, drone: 0, radar: 0, command: 0 };
   conflictLog = [];
+  currentEpisodeN = 0;
+  baselineMetrics = null;
+  const _tc = document.getElementById('trainingComparison');
+  if (_tc) _tc.style.display = 'none';
 
   Object.keys(allTargetPos).forEach(k => delete allTargetPos[k]);
   Object.keys(targetMeta).forEach(k => delete targetMeta[k]);
@@ -661,7 +706,7 @@ async function autoMultiStep() {
 
   addLog(`[Multi] ${source} ${propDesc || 'no proposals'}${conflictStr}${r.done ? ' — Episode done.' : ''}`, 'log-neu');
 
-  if (r.done) showMultiSummary(r.info);
+  if (r.done) showMultiSummary(r.info, r.conflict_rate, r.agent_rewards);
 }
 
 async function runAllMulti() {

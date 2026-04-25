@@ -188,6 +188,24 @@
         <span class="metric-label">Coordination Score</span>
         <span class="conflict-rate-val" id="coordinationScore" style="color:var(--green)">1.000</span>
       </div>
+      <!-- Training comparison -->
+      <div id="trainingComparison" style="display:none;margin-top:10px;border-top:1px solid #395144;padding-top:8px;">
+        <div style="font-size:0.65em;letter-spacing:0.1em;color:#AA8B56;margin-bottom:6px;">TRAINING IMPACT</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:0.68em;font-family:'Courier New',monospace;">
+          <div style="color:#888;"></div>
+          <div style="color:#AA8B56;text-align:center;">BEFORE</div>
+          <div style="color:#4E6C50;text-align:center;">AFTER</div>
+          <div style="color:#888;">Conflict</div>
+          <div style="text-align:center;color:#e11d48;" id="cmpConflictBefore">—</div>
+          <div style="text-align:center;color:#16a34a;" id="cmpConflictAfter">—</div>
+          <div style="color:#888;">Reward</div>
+          <div style="text-align:center;" id="cmpRewardBefore">—</div>
+          <div style="text-align:center;" id="cmpRewardAfter">—</div>
+          <div style="color:#888;">Coord</div>
+          <div style="text-align:center;" id="cmpCoordBefore">—</div>
+          <div style="text-align:center;" id="cmpCoordAfter">—</div>
+        </div>
+      </div>
       <div class="agent-rewards-grid" id="agentRewardsGrid">
         <div class="agent-reward-card satellite">
           <div class="agent-reward-val" id="rewardSatellite">0.0</div>
