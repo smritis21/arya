@@ -1,0 +1,470 @@
+#gameModeOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  background: transparent;
+  color: #395144;
+  font-family: "Courier New", monospace;
+  pointer-events: none;
+}
+
+#gameModeOverlay.game-visible {
+  display: block !important;
+}
+
+#gameModeOverlay .game-ui {
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  grid-template-columns: 280px 1fr 320px;
+  grid-template-areas:
+    "header header header"
+    "stats stats stats"
+    "agents map commentary";
+  gap: 12px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+#gameModeOverlay .game-shell {
+  display: contents;
+}
+
+#gameModeOverlay .game-panel {
+  z-index: 2000;
+  background: rgba(240, 235, 206, 0.95);
+  border: 1px solid #c8a96a;
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+#gameModeOverlay .game-header {
+  grid-area: header;
+  pointer-events: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+#gameModeOverlay .game-title {
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  color: #aa8b56;
+  font-weight: 700;
+}
+
+#gameModeOverlay .game-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#gameModeOverlay .game-btn {
+  padding: 6px 10px;
+  border: 1px solid #aa8b56;
+  border-radius: 3px;
+  background: #f0ebce;
+  color: #395144;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+#gameModeOverlay .game-btn:hover {
+  background: #e8e2ba;
+}
+
+#gameModeOverlay .game-btn.exit {
+  border-color: #8b2e2e;
+  color: #8b2e2e;
+}
+
+#gameModeOverlay .briefing-panel {
+  grid-area: header;
+  display: none;
+}
+
+#gameModeOverlay .briefing-title {
+  color: #aa8b56;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid #aa8b56;
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+#gameModeOverlay .briefing-mission {
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+#gameModeOverlay .briefing-story,
+#gameModeOverlay .briefing-objective {
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+#gameModeOverlay .status-bar {
+  grid-area: stats;
+  pointer-events: auto;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(80px, 1fr)) 1.2fr;
+  gap: 8px;
+}
+
+#gameModeOverlay .status-item {
+  border: 1px solid #aa8b56;
+  border-radius: 3px;
+  padding: 6px;
+  background: #ede8c8;
+}
+
+#gameModeOverlay .status-lbl {
+  font-size: 0.6rem;
+  color: #4e6c50;
+  letter-spacing: 0.09em;
+}
+
+#gameModeOverlay .status-val {
+  margin-top: 2px;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+#gameModeOverlay .event-bar {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: #8b2e2e;
+  font-weight: 700;
+}
+
+#gameModeOverlay .agent-panel {
+  grid-area: agents;
+  pointer-events: auto;
+  overflow: auto;
+  max-height: 100%;
+}
+
+#gameModeOverlay .agent-title {
+  margin: 0 0 8px;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  color: #aa8b56;
+}
+
+#gameModeOverlay .agent-card {
+  border: 1px solid #aa8b56;
+  border-radius: 3px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: #f0ebce;
+}
+
+#gameModeOverlay .agent-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+#gameModeOverlay .agent-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+#gameModeOverlay .agent-status {
+  font-size: 0.6rem;
+  border: 1px solid #aa8b56;
+  border-radius: 99px;
+  padding: 1px 7px;
+}
+
+#gameModeOverlay .agent-line {
+  font-size: 0.65rem;
+  margin: 2px 0;
+}
+
+#gameModeOverlay .agent-card.satellite .agent-name { color: #2563eb; }
+#gameModeOverlay .agent-card.drone .agent-name { color: #16a34a; }
+#gameModeOverlay .agent-card.radar .agent-name { color: #d97706; }
+#gameModeOverlay .agent-card.command .agent-name { color: #9333ea; }
+
+#gameModeOverlay .map-hud {
+  grid-area: map;
+  position: relative;
+  min-height: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  padding: 0;
+}
+
+#gameModeOverlay .map-hud-text {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.66rem;
+  color: #4e6c50;
+  background: rgba(240, 235, 206, 0.86);
+  border: 1px solid #aa8b56;
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+
+#gameModeOverlay .links-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+}
+
+#gameModeOverlay .commentary-panel {
+  grid-area: commentary;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+#gameModeOverlay .commentary-title {
+  margin: 0 0 8px;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  color: #aa8b56;
+}
+
+#gameModeOverlay .commentary-feed {
+  flex: 1;
+  overflow: auto;
+  background: #ede8c8;
+  border: 1px solid #aa8b56;
+  border-radius: 3px;
+  padding: 8px;
+}
+
+#gameModeOverlay .commentary-line {
+  font-size: 0.7rem;
+  line-height: 1.4;
+  padding: 5px 2px;
+  border-bottom: 1px solid rgba(170, 139, 86, 0.22);
+}
+
+#gameModeOverlay .commentary-line:last-child {
+  border-bottom: none;
+}
+
+#gameModeOverlay .debrief-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 5200;
+  pointer-events: auto;
+}
+
+#gameModeOverlay .game-ui > * {
+  pointer-events: auto;
+}
+
+#gameModeOverlay .debrief-card {
+  width: min(520px, 94vw);
+  background: #f0ebce;
+  border: 1px solid #aa8b56;
+  border-radius: 6px;
+  padding: 14px;
+}
+
+#gameModeOverlay .debrief-card h4 {
+  margin: 0 0 10px;
+  color: #aa8b56;
+  letter-spacing: 0.12em;
+  font-size: 0.76rem;
+}
+
+#gameModeOverlay .debrief-result {
+  border: 1px solid #aa8b56;
+  border-radius: 4px;
+  background: #ede8c8;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+#gameModeOverlay .debrief-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0;
+  font-size: 0.74rem;
+}
+
+#gameModeOverlay .debrief-close {
+  margin-top: 10px;
+  width: 100%;
+}
+
+body.game-mode-active #sensorSel,
+body.game-mode-active #targetSel {
+  border-color: #aa8b56;
+  box-shadow: 0 0 0 2px rgba(170, 139, 86, 0.25);
+}
+
+body.game-mode-active .sensor-item.available {
+  box-shadow: 0 0 0 2px rgba(78, 108, 80, 0.16) inset;
+}
+
+body.game-mode-active .threat-item {
+  box-shadow: 0 0 0 1px rgba(170, 139, 86, 0.18) inset;
+}
+
+.leaflet-container {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+@keyframes gmPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.7; }
+}
+
+.gm-target-pulse {
+  animation: gmPulse 1s infinite;
+}
+
+.gm-sensor-offline {
+  opacity: 0.6;
+}
+
+body.game-page {
+  overflow: hidden;
+}
+
+.game-page-header-strip {
+  margin: 8px 10px 0;
+  padding: 10px 12px;
+  border: 1px solid #aa8b56;
+  border-radius: 6px;
+  background: rgba(240, 235, 206, 0.95);
+}
+
+.game-strip-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: #aa8b56;
+  font-weight: 700;
+}
+
+.game-strip-sub {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: #4e6c50;
+}
+
+.game-page-stats-row {
+  margin: 8px 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.game-stat-chip {
+  border: 1px solid #aa8b56;
+  border-radius: 6px;
+  background: rgba(240, 235, 206, 0.95);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.66rem;
+  color: #4e6c50;
+}
+
+.game-stat-chip strong {
+  color: #395144;
+  font-size: 0.9rem;
+}
+
+.game-grade-footer {
+  background: rgba(240, 235, 206, 0.95);
+}
+
+body.game-page {
+  margin: 0;
+  background: #f0ebce;
+  color: #395144;
+  overflow: hidden;
+}
+
+.game-page-grid {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  grid-template-columns: 280px 1fr 330px;
+  grid-template-areas:
+    "header header header"
+    "brief brief brief"
+    "status status status"
+    "agents map commentary";
+  gap: 10px;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.game-main-header { grid-area: header; display: flex; justify-content: space-between; align-items: center; background: #395144; color: #f0ebce; border: 1px solid #aa8b56; border-radius: 6px; padding: 10px 12px; }
+.game-main-title { font-size: 1rem; letter-spacing: 0.14em; font-weight: 700; }
+.game-main-subtitle { font-size: 0.7rem; opacity: 0.9; margin-top: 4px; }
+.game-control-bar { display: flex; gap: 8px; align-items: center; }
+
+.game-briefing-row { grid-area: brief; }
+.game-difficulty-row { display: flex; gap: 8px; margin: 6px 0 10px; }
+.game-difficulty-row .task-btn { width: auto; padding: 6px 12px; }
+.game-briefing-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; }
+.game-briefing-story, .game-briefing-objective { font-size: 0.72rem; line-height: 1.45; }
+
+.game-status-row { grid-area: status; display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 8px; }
+.game-status-item { background: #ede8c8; border: 1px solid #aa8b56; border-radius: 4px; padding: 8px; display: flex; justify-content: space-between; font-size: 0.67rem; }
+.game-status-item strong { font-size: 0.86rem; color: #395144; }
+
+.game-agents { grid-area: agents; overflow-y: auto; }
+.game-battlefield { grid-area: map; min-height: 0; display: flex; flex-direction: column; }
+.game-battlefield .map-area { flex: 1; min-height: 0; }
+.game-commentary { grid-area: commentary; display: flex; flex-direction: column; min-height: 0; }
+.game-commentary-feed { flex: 1; overflow-y: auto; border: 1px solid #aa8b56; border-radius: 4px; padding: 8px; background: #ede8c8; font-size: 0.7rem; line-height: 1.45; }
+
+.game-manual-controls { margin-top: 10px; border-top: 1px solid #aa8b56; padding-top: 10px; }
+
+.game-hidden-compat { position: fixed; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+
+.game-debrief-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 5000; }
+.game-debrief-card { background: #f0ebce; border: 1px solid #aa8b56; border-radius: 6px; padding: 16px; min-width: 320px; display: grid; gap: 8px; }
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+.game-battlefield .map-area,
+.game-battlefield .map-container {
+  min-height: 0;
+  height: 100%;
+}

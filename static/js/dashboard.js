@@ -79,6 +79,8 @@ function getSensorPos(id) { return customSensorPos[id] || SENSOR_POS[id] || [20,
 // ── Leaflet init ──────────────────────────────────────────────────────────────
 function initMap() {
   map = L.map('map', { center: [22, 80], zoom: 5, zoomControl: true });
+  // Expose active Leaflet instance for game layer integrations.
+  window.map = map;
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
     maxZoom: 18
