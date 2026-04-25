@@ -72,7 +72,7 @@ class CurriculumEngine:
                 "sensor_failure_prob":    0.0,
                 "conflict_injection":     False,
                 "freeze_agent":           None,
-                "seed_override":          42,
+                "seed_override":          None,
             }
 
         elif self.current_phase == 2:
@@ -86,7 +86,7 @@ class CurriculumEngine:
                 "sensor_failure_prob":    failure_prob,
                 "conflict_injection":     True,
                 "freeze_agent":           None,
-                "seed_override":          7,
+                "seed_override":          None,
             }
 
         else:
