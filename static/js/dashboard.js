@@ -765,4 +765,5 @@ window.addEventListener('load', () => {
 
   setTool('move');
   setMode('single');
+  loadTask(20, 42, 'Easy', 'MONITORING');
 });
