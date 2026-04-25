@@ -188,29 +188,36 @@ def _get_actions(observation) -> tuple[list[Action], str]:
 
 
 # ── Multi-agent helpers ───────────────────────────────────────────────────────
-def _build_multi_prompt(agent_id: str, agent_obs) -> str:
+def _build_multi_prompt(agent_id: str, agent_obs, used_sensors: set = None) -> str:
+    used_sensors = used_sensors or set()
+    my_sensors = [
+        s for s in agent_obs.sensors
+        if s["available"] and s["id"] not in used_sensors
+        and (agent_id == "command" or s["type"] == agent_id)
+    ]
     sensors = "\n".join(
-        f"  - id={s['id']} type={s['type']} range={s['range']}km available={s['available']}"
-        for s in agent_obs.sensors if s["available"]
+        f"  - id={s['id']} type={s['type']} range={s['range']}km"
+        for s in my_sensors
     )
     targets = "\n".join(
-        f"  - id={t['id']} priority={t['priority']} active={t['active']}"
+        f"  - id={t['id']} priority={t['priority']}"
         for t in agent_obs.targets if t["active"]
     )
+    if not my_sensors:
+        return ""
     return f"""You are the {agent_id} agent in a multi-agent ISR system.
-Propose assignments for sensors you are responsible for.
+You may ONLY assign YOUR sensors listed below. Do NOT use sensors belonging to other agents.
 Priority 3=HIGH, 2=MED, 1=LOW. Cover HIGH threats first.
 
 Timestep: {agent_obs.timestep}
-Your agent type: {agent_id}
 
-Available Sensors:
+Your sensors ({agent_id} type only):
 {sensors}
 
 Active Threats:
 {targets}
 
-Respond ONLY with a JSON array:
+Respond ONLY with a JSON array using only your sensors above:
 [{{"sensor_id": "S1", "target_id": "T0_1"}}]
 """
 
@@ -295,7 +302,9 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
         try:
             for agent_id in AGENT_TYPES:
                 agent_obs = agent_obs_map[agent_id]
-                prompt = _build_multi_prompt(agent_id, agent_obs)
+                prompt = _build_multi_prompt(agent_id, agent_obs, used_sensors)
+                if not prompt:
+                    continue
                 response = _llm_client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[{"role": "user", "content": prompt}],
@@ -305,11 +314,11 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
                 raw = response.choices[0].message.content.strip()
                 start, end = raw.find("["), raw.rfind("]") + 1
                 items = json.loads(raw[start:end])
-                valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"]}
+                my_sensors = {s["id"] for s in agent_obs.sensors if s["available"] and s["id"] not in used_sensors and (agent_id == "command" or s["type"] == agent_id)}
                 valid_targets = {t["id"] for t in agent_obs.targets if t["active"]}
                 for item in items:
                     sid, tid = item.get("sensor_id"), item.get("target_id")
-                    if sid in valid_sensors and tid in valid_targets:
+                    if sid in my_sensors and tid in valid_targets:
                         proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
                         used_sensors.add(sid)
             if proposals:
