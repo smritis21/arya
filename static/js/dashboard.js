@@ -719,9 +719,11 @@ async function autoMultiStep() {
 async function runAllMulti() {
   if (!obsLoaded) return addLog('Load a mission first', 'log-neg');
   if (mxDone) await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING');
-  while (!mxDone) {
+  let safetyCounter = 0;
+  while (!mxDone && safetyCounter < maxSteps + 5) {
     await autoMultiStep();
     await new Promise(r => setTimeout(r, 1200));
+    safetyCounter++;
   }
 }
 
