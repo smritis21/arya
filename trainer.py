@@ -629,11 +629,12 @@ class ARYAXTrainer:
 
     # ── Evaluation ────────────────────────────────────────────────────
     def evaluate(self) -> dict:
-        """Run deterministic eval on easy/medium/hard tasks."""
+        """Run deterministic eval using trained agent instances."""
         try:
             from tasks.grader import run_deterministic_eval
-            # Pass None since we are using greedy agents, not LLM agents
-            result = run_deterministic_eval(agents=None, verbose=True, mode="multi")
+            trained_agents = list(self._agents.values())  # [SatelliteAgent, DroneAgent, RadarAgent, CommandAgent]
+            logger.info("[Eval] evaluating trained policy with %d agents", len(trained_agents))
+            result = run_deterministic_eval(agents=trained_agents, verbose=True, mode="multi")
             conflict_rate      = self.negotiation.get_conflict_rate()
             coordination_score = 1.0 - conflict_rate
             result["conflict_rate"]      = conflict_rate
