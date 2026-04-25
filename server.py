@@ -55,60 +55,55 @@ except ImportError:
     _LOCAL_HF_AVAILABLE = False
 
 def init_local_models():
-    """Initializes local transformers model and loads LoRA adapters if available."""
     global _base_model, _tokenizer, _has_adapters
     if not _LOCAL_HF_AVAILABLE:
         print("[WARN] transformers or peft not installed. Will use greedy fallback.")
         return
 
     checkpoint_dir = Path("./checkpoints/arya_x_lora")
-    if not checkpoint_dir.exists():
-        print(f"[WARN] No checkpoints found at {checkpoint_dir}. Will use greedy fallback.")
+    adapter_file = checkpoint_dir / "adapter_model.safetensors"
+    if not adapter_file.exists():
+        print(f"[WARN] No adapter found at {checkpoint_dir}. Will use greedy fallback.")
         return
 
-    print(f"[LLM] Loading base model ({MODEL_NAME}) locally...")
+    adapter_config = checkpoint_dir / "adapter_config.json"
+    base_model_name = MODEL_NAME
     try:
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, padding_side="left")
-        load_kwargs = {}
-        if torch.cuda.is_available():
-            load_kwargs["load_in_4bit"] = True
-            load_kwargs["device_map"] = "auto"
-        
-        base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, **load_kwargs)
-        
-        first_agent_id = "SAT"
-        first_adapter_path = checkpoint_dir / f"adapter_{first_agent_id}"
-        if not first_adapter_path.exists():
-             print(f"[WARN] Missing adapter {first_adapter_path}. Using greedy.")
-             return
-             
-        _base_model = PeftModel.from_pretrained(base_model, str(first_adapter_path), adapter_name=first_agent_id)
-        
-        for agent_canonical, agent_short in AGENT_ID_MAP.items():
-            if agent_short == first_agent_id:
-                continue
-            adapter_path = checkpoint_dir / f"adapter_{agent_short}"
-            if adapter_path.exists():
-                _base_model.load_adapter(str(adapter_path), adapter_name=agent_short)
-        
+        with open(adapter_config) as f:
+            cfg = json.load(f)
+            base_model_name = cfg.get("base_model_name_or_path", MODEL_NAME)
+    except Exception:
+        pass
+
+    print(f"[LLM] Loading base model ({base_model_name}) + LoRA adapter...")
+    try:
+        _tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_dir), padding_side="left")
+        if not torch.cuda.is_available():
+            print("[WARN] No GPU detected — skipping local adapter load. Using remote API.")
+            return
+        load_kwargs = {"load_in_4bit": True, "device_map": "auto"}
+        base = AutoModelForCausalLM.from_pretrained(base_model_name, **load_kwargs)
+        _base_model = PeftModel.from_pretrained(base, str(checkpoint_dir))
         _has_adapters = True
-        print("[LLM] Local model and LoRA adapters loaded successfully.")
+        print("[LLM] LoRA adapter loaded successfully.")
     except Exception as e:
-        print(f"[ERROR] Failed to load local model/adapters: {e}")
+        print(f"[ERROR] Failed to load adapter: {e}")
         _has_adapters = False
 
-# Skip local model loading — use remote API via HF_TOKEN
+# Initialize — try local adapter first, fall back to remote API
 print("\nInitializing Environment and Models...")
+init_local_models()
 
-if HF_TOKEN:
-    try:
-        from openai import OpenAI
-        _llm_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-        print(f"[LLM] Connected to remote API: {MODEL_NAME}")
-    except Exception as e:
-        print(f"[LLM] Failed to init client: {e}. Using greedy fallback.")
-else:
-    print("[LLM] No HF_TOKEN set — using greedy fallback.")
+if not _has_adapters:
+    if HF_TOKEN:
+        try:
+            from openai import OpenAI
+            _llm_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+            print(f"[LLM] Connected to remote API: {MODEL_NAME}")
+        except Exception as e:
+            print(f"[LLM] Failed to init client: {e}. Using greedy fallback.")
+    else:
+        print("[LLM] No HF_TOKEN set — using greedy fallback.")
 
 
 # ── Single-agent helpers (unchanged) ─────────────────────────────────────────
@@ -248,41 +243,43 @@ def _greedy_proposals(agent_id: str, agent_obs, used_sensors: set, used_targets:
 
 
 def _lora_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
-    """Build multi-agent proposals using local LoRA adapters."""
+    """Build multi-agent proposals using single shared LoRA adapter."""
     proposals: list[Proposal] = []
-    
+    used_sensors: set = set()
+    used_targets: set = set()
+
     for agent_id in AGENT_TYPES:
         agent_obs = agent_obs_map[agent_id]
         prompt = _build_multi_prompt(agent_id, agent_obs)
         chat_prompt = f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-        
         try:
-            short_id = AGENT_ID_MAP[agent_id]
-            _base_model.set_adapter(short_id)
-            
             inputs = _tokenizer(chat_prompt, return_tensors="pt").to(_base_model.device)
             outputs = _base_model.generate(**inputs, max_new_tokens=128, temperature=0.1, do_sample=True, pad_token_id=_tokenizer.eos_token_id)
-            full_response = _tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            if "assistant" in full_response:
-                raw = full_response.split("assistant")[-1].strip()
-            else:
-                raw = full_response
-                
+            raw = _tokenizer.decode(outputs[0], skip_special_tokens=True)
+            if "assistant" in raw:
+                raw = raw.split("assistant")[-1].strip()
             start, end = raw.find("["), raw.rfind("]") + 1
             if start == -1 or end == 0:
-                continue
+                raise ValueError("no JSON array")
             items = json.loads(raw[start:end])
-            
-            valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"]}
-            valid_targets = {t["id"] for t in agent_obs.targets if t["active"]}
+            valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"] and s["id"] not in used_sensors}
+            valid_targets = {t["id"] for t in agent_obs.targets if t["active"] and t["id"] not in used_targets}
             for item in items:
                 sid, tid = item.get("sensor_id"), item.get("target_id")
                 if sid in valid_sensors and tid in valid_targets:
                     proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
+                    used_sensors.add(sid)
+                    used_targets.add(tid)
+                    break
         except Exception as e:
-            print(f"[WARN] LoRA generation failed for {agent_id}: {e}")
-            
+            print(f"[WARN] LoRA generation failed for {agent_id}: {e} — using greedy")
+            cmd_obs = agent_obs_map["command"]
+            for p in _greedy_proposals(agent_id, cmd_obs, used_sensors, set(used_targets)):
+                proposals.append(p)
+                used_sensors.add(p.sensor_id)
+                used_targets.add(p.target_id)
+                break
+
     return proposals, "lora"
 
 
