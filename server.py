@@ -556,10 +556,8 @@ def auto_multi():
                 used_targets.add(p.target_id)
         source = "greedy"
 
-    proposals, source = _get_multi_proposals(mx_obs)
-
-    mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
-
+    new_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
+    mx_obs = None if done else new_obs
     conflict_rate = info["conflict_rate"]
     conflicts     = info["conflicts"]
 
@@ -567,7 +565,7 @@ def auto_multi():
         "proposals":         [{"agent_id": p.agent_id, "sensor_id": p.sensor_id,
                                "target_id": p.target_id} for p in proposals],
         "agent":             source,
-        "observations":      {k: v.to_dict() for k, v in mx_obs.items()},
+        "observations":      {k: v.to_dict() for k, v in new_obs.items()},
         "step_rewards":      step_rewards,
         "agent_rewards":     info["agent_rewards"],
         "per_agent_rewards": info["agent_rewards"],
