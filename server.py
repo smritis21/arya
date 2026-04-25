@@ -468,7 +468,6 @@ def reset_multi():
     mx_env.density_factor    = density_factor
     mx_env.failure_prob      = failure_prob
     mx_env.conflict_injection = conflict_injection
-    print(f"[DEBUG] reset_multi: max_steps={max_steps}, seed={seed}")
     mx_obs = mx_env.reset()
     return jsonify({
         "seed":            seed,
@@ -557,8 +556,7 @@ def auto_multi():
                 used_targets.add(p.target_id)
         source = "greedy"
 
-    proposals = _filter_proposals(proposals, mx_obs)
-    print(f"[DEBUG] filtered proposals: {[(p.agent_id, p.sensor_id, p.target_id) for p in proposals]}")
+    proposals, source = _get_multi_proposals(mx_obs)
 
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
