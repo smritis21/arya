@@ -305,10 +305,12 @@ function setMode(mode) {
   addLog(`Switched to ${mode === 'multi' ? 'MULTI-AGENT' : 'SINGLE-AGENT'} mode`, 'log-neu');
 
   if (mode === 'multi' && obsLoaded) {
-    const taskSteps = { 'Easy': 20, 'Medium': 40, 'Hard': 60 };
-    const taskSeeds = { 'Easy': 42, 'Medium': 7, 'Hard': 13 };
+    const taskSteps =   { 'Easy': 20, 'Medium': 40, 'Hard': 60 };
+    const taskSeeds =   { 'Easy': 42, 'Medium': 7,  'Hard': 13 };
     const taskThreats = { 'Easy': 'MONITORING', 'Medium': 'ELEVATED', 'Hard': 'CRITICAL' };
-    loadTask(taskSteps[currentTask] || 20, taskSeeds[currentTask] || 42, currentTask, taskThreats[currentTask] || 'MONITORING');
+    const steps = taskSteps[currentTask] || 20;
+    const seed  = taskSeeds[currentTask] || 42;
+    loadTask(steps, seed, currentTask, taskThreats[currentTask] || 'MONITORING');
   }
 }
 
