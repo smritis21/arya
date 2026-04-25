@@ -297,6 +297,7 @@ function setMode(mode) {
   document.getElementById('multiControls').style.display   = mode === 'multi'  ? '' : 'none';
   document.getElementById('multiMetrics').style.display    = mode === 'multi'  ? '' : 'none';
   document.getElementById('conflictPanel').style.display   = mode === 'multi'  ? '' : 'none';
+  if (mode === 'multi') fetchTrendData();
 
   document.querySelectorAll('.multi-legend').forEach(el => {
     el.style.display = mode === 'multi' ? 'flex' : 'none';
@@ -471,6 +472,7 @@ VERDICT: ${verdict}`;
 
   document.getElementById('summaryText').textContent = summary;
   document.getElementById('summaryModal').style.display = 'flex';
+  document.getElementById('summaryChartWrap').style.display = 'none';
 }
 
 function showMultiSummary(info, conflictRateOverride, agentRewardsOverride) {
@@ -502,9 +504,11 @@ function showMultiSummary(info, conflictRateOverride, agentRewardsOverride) {
     document.getElementById('cmpCoordAfter').style.color     = coordScore > bl.coord ? '#16a34a' : '#e11d48';
   }
 
-  const assignmentLines = (info.assignments || []).map((a, i) =>
+  const assignmentLines = (info.assignments || []).slice(0, 10).map((a, i) =>
     `Step ${i + 1}: [${(a.agent || '?').toUpperCase()}] ${sensorLabel(a.sensor)} → ${targetLabel(a.target)}`
   ).join('\n');
+  const moreAssignments = (info.assignments || []).length > 10
+    ? `\n  ... and ${(info.assignments || []).length - 10} more assignments` : '';
 
   const verdict = conflictRateFinal < 0.1 ? 'Excellent coordination — minimal conflicts.'
     : conflictRateFinal < 0.3 ? 'Good coordination — moderate conflicts resolved.'
@@ -531,12 +535,13 @@ CONFLICT RATE: ${conflictRateFinal.toFixed(4)} (${(conflictRateFinal * 100).toFi
 ${comparisonLines}
 
 ASSIGNMENTS:
-${assignmentLines}
+${assignmentLines}${moreAssignments}
 
 VERDICT: ${verdict}`;
 
   document.getElementById('summaryText').textContent = summary;
   document.getElementById('summaryModal').style.display = 'flex';
+  setTimeout(fetchTrendData, 100);
 }
 
 // ── Single-agent actions ───────────────────────────────────────────────────────
@@ -777,3 +782,68 @@ window.addEventListener('load', () => {
   setMode('single');
   loadTask(20, 42, 'Easy', 'MONITORING');
 });
+
+// ── Training trend chart ──────────────────────────────────────────────────────
+let _trendChart = null;
+
+async function fetchTrendData() {
+  if (typeof Chart === 'undefined') return;
+  const wrap = document.getElementById('summaryChartWrap');
+  const canvas = document.getElementById('trendChart');
+  if (!wrap || !canvas) return;
+  wrap.style.display = 'block';
+
+  // Destroy stale instance
+  if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
+
+  let data;
+  try {
+    data = await fetch('/metrics/history').then(r => r.json());
+  } catch (_) { return; }
+  if (!Array.isArray(data) || data.length === 0) return;
+
+  _trendChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.map(d => 'S' + d.step),
+      datasets: [
+        {
+          label: 'Reward',
+          data: data.map(d => d.reward),
+          borderColor: '#e11d48',
+          backgroundColor: 'rgba(225,29,72,0.08)',
+          borderWidth: 2, pointRadius: 3, tension: 0.3, yAxisID: 'y',
+        },
+        {
+          label: 'Reward Std',
+          data: data.map(d => d.reward_std),
+          borderColor: '#16a34a',
+          backgroundColor: 'rgba(22,163,74,0.08)',
+          borderWidth: 1.5, pointRadius: 2, tension: 0.3, yAxisID: 'y2',
+        },
+        {
+          label: 'KL ×1000',
+          data: data.map(d => +(d.kl * 1000).toFixed(4)),
+          borderColor: '#AA8B56',
+          borderWidth: 1.5, pointRadius: 2, tension: 0.3,
+          borderDash: [4, 3], yAxisID: 'y2',
+        },
+      ]
+    },
+    options: {
+      responsive: true, animation: false,
+      plugins: {
+        legend: { labels: { color: '#c8d4b8', font: { family: 'Courier New', size: 9 }, boxWidth: 10 } }
+      },
+      scales: {
+        x: { ticks: { color: '#888', font: { size: 9 } }, grid: { color: '#2a2a2a' } },
+        y: { position: 'left', ticks: { color: '#e11d48', font: { size: 9 } }, grid: { color: '#2a2a2a' },
+             title: { display: true, text: 'reward', color: '#e11d48', font: { size: 8 } } },
+        y2: { position: 'right', ticks: { color: '#16a34a', font: { size: 9 } }, grid: { drawOnChartArea: false },
+              title: { display: true, text: 'std/kl', color: '#16a34a', font: { size: 8 } } }
+      }
+    }
+  });
+}
+
+function showTrendPanel() { fetchTrendData(); }

@@ -60,7 +60,7 @@ def init_local_models():
         print("[WARN] transformers or peft not installed. Will use greedy fallback.")
         return
 
-    checkpoint_dir = Path("./checkpoints/arya_x_lora_3")
+    checkpoint_dir = Path("./checkpoints/arya_x_lora")
     adapter_file = checkpoint_dir / "adapter_model.safetensors"
     if not adapter_file.exists():
         print(f"[WARN] No adapter found at {checkpoint_dir}. Will use greedy fallback.")
@@ -542,19 +542,19 @@ def auto_multi():
     if mx_obs is None:
         return jsonify({"error": "Call /reset_multi first"}), 400
 
-    if _has_adapters or _llm_client:
+    if _llm_client or _has_adapters:
         proposals, source = _get_multi_proposals(mx_obs)
     else:
-        # Use wired agent classes (not raw greedy helper)
+        cmd_obs = mx_obs["command"]
+        used_sensors: set = set()
+        used_targets: set = set()
         proposals = []
-        all_props = []
-        for agent_id, agent in [("satellite", sat_agent), ("drone", drone_agent), ("radar", radar_agent)]:
-            agent.observe(mx_obs[agent_id])
-            all_props += agent.propose()
-        command_agent.observe(mx_obs["command"], proposals=all_props)
-        all_props += command_agent.propose()
-        proposals = all_props
-        source = "agents"
+        for agent_id in ["satellite", "drone", "radar", "command"]:
+            for p in _greedy_proposals(agent_id, cmd_obs, used_sensors, used_targets):
+                proposals.append(p)
+                used_sensors.add(p.sensor_id)
+                used_targets.add(p.target_id)
+        source = "greedy"
 
     new_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
     mx_obs = None if done else new_obs
@@ -576,32 +576,11 @@ def auto_multi():
     })
 
 
-# ── Metrics history endpoint ─────────────────────────────────────────────────
-@app.get("/metrics/history")
-def metrics_history():
-    metrics_path = Path("./logs/training_metrics.json")
-    if not metrics_path.exists():
-        return jsonify([])
-    try:
-        with open(metrics_path) as f:
-            data = json.load(f)
-        # Support both array format (per-episode) and legacy single-object format
-        if isinstance(data, dict):
-            data = [data]
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
 # ── UI ────────────────────────────────────────────────────────────────────────
 @app.get("/")
 @app.get("/ui")
 def ui():
     return render_template("dashboard.html")
-
-@app.get("/game")
-def game():
-    return render_template("game.html")
 
 
 if __name__ == "__main__":

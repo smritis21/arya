@@ -7,6 +7,7 @@
 <title>Arya-X — Multi-Agent ISR Sensor Allocation System</title>
 <link rel="stylesheet" href="/static/css/dashboard.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -233,6 +234,7 @@
       </div>
     </div>
 
+
     <!-- Conflict log (shown in multi mode) -->
     <div class="panel-section" id="conflictPanel" style="display:none">
       <div class="section-title">CONFLICT LOG <span id="conflictCount" style="float:right;color:var(--red);font-size:0.9em"></span></div>
@@ -259,6 +261,10 @@
       <button onclick="closeSummary()" style="background:none;border:none;color:#F0EBCE;font-size:1.4em;cursor:pointer;">&times;</button>
     </div>
     <pre id="summaryText" style="color:#c8d4b8;font-family:'Courier New',monospace;font-size:0.82em;white-space:pre-wrap;line-height:1.6;margin:0;"></pre>
+    <div id="summaryChartWrap" style="display:none;margin-top:18px;border-top:1px solid #395144;padding-top:14px;">
+      <div style="font-size:0.65em;letter-spacing:0.1em;color:#AA8B56;margin-bottom:8px;">GRPO TRAINING — REWARD CURVE (100 steps, T4 GPU)</div>
+      <canvas id="trendChart" height="110"></canvas>
+    </div>
   </div>
 </div>
 <!-- INFO MODAL -->

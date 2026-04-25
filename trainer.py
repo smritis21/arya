@@ -385,6 +385,9 @@ class ARYAXTrainer:
 
                 # Convert to dict format for negotiation layer
                 from env.multiagent import Proposal as EnvProposal
+                # Build sensor/target type lookups from command's global obs
+                _s_type = {s["id"]: s.get("type", "unknown") for s in cmd_obs_raw.sensors}
+                _t_type = {t["id"]: t.get("type", "strategic") for t in cmd_obs_raw.targets}
                 final_proposals_dict = [
                     {
                         "agent_id":          p.agent_id,
@@ -392,7 +395,9 @@ class ARYAXTrainer:
                         "target_id":         p.target_id,
                         "priority_estimate": p.priority_estimate,
                         "confidence":        p.confidence,
-                        "capability_score":  p.confidence,  # proxy
+                        "capability_score":  CAPABILITY_MATRIX.get(
+                            (_s_type.get(p.sensor_id, "unknown"), _t_type.get(p.target_id, "strategic")), 0.5
+                        ),
                     }
                     for p in all_proposals_obj
                 ]

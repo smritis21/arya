@@ -89,6 +89,9 @@ class DroneAgent(BaseAgent):
         except (IndexError, ValueError):
             return 99
 
+    def _is_boundary_target(self, target_id: str) -> bool:
+        return self._is_boundary(target_id)
+
     def _is_boundary(self, target_id: str) -> bool:
         """Even sequential index = boundary / overlap zone with radar arc."""
         try:

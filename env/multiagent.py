@@ -263,7 +263,7 @@ class AryaXEnv:
         for a in AGENT_TYPES:
             self._agent_rewards[a] += step_rewards.get(a, 0.0)
 
-        print(f"[DEBUG] step={self.current_step} step_rewards={step_rewards} cumulative={self._agent_rewards}")
+        # print(f"[DEBUG] step={self.current_step} step_rewards={step_rewards} cumulative={self._agent_rewards}")
 
         self._missed.extend(
             t.id for t in self.targets

@@ -72,52 +72,35 @@ TASKS = [
 ]
 
 def init_local_models():
-    """Initializes local transformers model and loads LoRA adapters if available."""
+    """Load the single shared LoRA checkpoint for all agents."""
     global _base_model, _tokenizer, _has_adapters
     if not _LOCAL_HF_AVAILABLE:
         print("[WARN] transformers or peft not installed. Will use greedy fallback.")
         return
 
-    checkpoint_dir = Path("./checkpoints/arya_x_lora")
-    if not checkpoint_dir.exists():
-        print(f"[WARN] No checkpoints found at {checkpoint_dir}. Will use greedy fallback.")
+    checkpoint_dir = Path("./checkpoints/arya_x_lora_3")
+    if not (checkpoint_dir / "adapter_model.safetensors").exists():
+        print(f"[WARN] No adapter found at {checkpoint_dir}. Will use greedy fallback.")
         return
 
-    print(f"[LLM] Loading base model ({MODEL_NAME}) locally...")
+    # Read base model name directly from the saved adapter config
+    import json as _json
+    base_model_name = _json.loads((checkpoint_dir / "adapter_config.json").read_text())["base_model_name_or_path"]
+    print(f"[LLM] Loading {base_model_name} + shared LoRA adapter...")
     try:
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, padding_side="left")
-        
-        # Load base model (4-bit if cuda available)
-        load_kwargs = {}
+        _tokenizer = AutoTokenizer.from_pretrained(str(checkpoint_dir), padding_side="left")
+
+        load_kwargs = {"device_map": "auto"}
         if torch.cuda.is_available():
             load_kwargs["load_in_4bit"] = True
-            load_kwargs["device_map"] = "auto"
-        
-        base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, **load_kwargs)
-        
-        # Load first adapter to initialize PeftModel
-        first_agent_id = "SAT"
-        first_adapter_path = checkpoint_dir / f"adapter_{first_agent_id}"
-        if not first_adapter_path.exists():
-             print(f"[WARN] Missing adapter {first_adapter_path}. Using greedy.")
-             return
-             
-        _base_model = PeftModel.from_pretrained(base_model, str(first_adapter_path), adapter_name=first_agent_id)
-        
-        # Load remaining adapters
-        for agent_canonical, agent_short in AGENT_ID_MAP.items():
-            if agent_short == first_agent_id:
-                continue
-            adapter_path = checkpoint_dir / f"adapter_{agent_short}"
-            if adapter_path.exists():
-                _base_model.load_adapter(str(adapter_path), adapter_name=agent_short)
-            else:
-                print(f"[WARN] Missing adapter {adapter_path} for {agent_canonical}")
-        
+
+        base = AutoModelForCausalLM.from_pretrained(base_model_name, **load_kwargs)
+        _base_model = PeftModel.from_pretrained(base, str(checkpoint_dir))
+        _base_model.eval()
         _has_adapters = True
-        print("[LLM] Local model and LoRA adapters loaded successfully.")
+        print("[LLM] Shared LoRA adapter loaded for all agents.")
     except Exception as e:
-        print(f"[ERROR] Failed to load local model/adapters: {e}")
+        print(f"[ERROR] Failed to load model: {e}")
         _has_adapters = False
 
 def build_prompt(obs) -> str:
@@ -325,10 +308,6 @@ def _lora_multi_proposals(obs_map: dict) -> list[Proposal]:
         chat_prompt = f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\\n\\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n"
         
         try:
-            # Set specific LoRA adapter for this agent
-            short_id = AGENT_ID_MAP[agent_id]
-            _base_model.set_adapter(short_id)
-            
             inputs = _tokenizer(chat_prompt, return_tensors="pt").to(_base_model.device)
             outputs = _base_model.generate(**inputs, max_new_tokens=128, temperature=0.1, do_sample=True, pad_token_id=_tokenizer.eos_token_id)
             full_response = _tokenizer.decode(outputs[0], skip_special_tokens=True)
