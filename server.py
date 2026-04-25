@@ -514,16 +514,37 @@ def step_multi():
     })
 
 
+def _filter_proposals(proposals: list, agent_obs_map: dict) -> list:
+    """Drop any proposal where the agent claims a sensor not matching their type."""
+    filtered = []
+    used_sensors, used_targets = set(), set()
+    for p in proposals:
+        agent_id = p.agent_id
+        agent_obs = agent_obs_map.get(agent_id)
+        if not agent_obs:
+            continue
+        sensor_type = next((s["type"] for s in agent_obs.sensors if s["id"] == p.sensor_id), None)
+        if sensor_type is None:
+            continue
+        if agent_id != "command" and sensor_type != agent_id:
+            continue  # wrong sensor type for this agent
+        if p.sensor_id in used_sensors or p.target_id in used_targets:
+            continue
+        filtered.append(p)
+        used_sensors.add(p.sensor_id)
+        used_targets.add(p.target_id)
+    return filtered
+
+
 @app.post("/auto_multi")
 def auto_multi():
     global mx_obs
     if mx_obs is None:
         return jsonify({"error": "Call /reset_multi first"}), 400
 
-    if _llm_client:
+    if _llm_client or _has_adapters:
         proposals, source = _get_multi_proposals(mx_obs)
     else:
-        # Greedy fallback — shared used_sensors/used_targets prevents duplicates
         cmd_obs = mx_obs["command"]
         used_sensors: set = set()
         used_targets: set = set()
@@ -534,6 +555,8 @@ def auto_multi():
                 used_sensors.add(p.sensor_id)
                 used_targets.add(p.target_id)
         source = "greedy"
+
+    proposals = _filter_proposals(proposals, mx_obs)
 
     mx_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
 
