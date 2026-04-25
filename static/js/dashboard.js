@@ -12,6 +12,7 @@ let mxDone = false;
 let mxStepCount = 0;
 let agentRewardsCumulative = { satellite: 0, drone: 0, radar: 0, command: 0 };
 let conflictLog = [];
+let activeThreats = []; // FIX 6: Global threat tracker
 
 // Leaflet map + layer references
 let map = null;
@@ -167,20 +168,20 @@ function renderSensors(data) {
 function renderEnvTargets(data, conflictTargetIds) {
   const conflictSet = new Set(conflictTargetIds || []);
 
+  // Update global tracking
   data.forEach(t => {
+    if (!activeThreats.find(x => x.id === t.id)) {
+        activeThreats.push(t);
+    }
     targetMeta[t.id] = { priority: t.priority };
     if (!allTargetPos[t.id]) getTargetPos(t.id);
   });
 
-  const activeIds = new Set(data.map(t => t.id));
-  Object.keys(targetMarkers).forEach(id => {
-    if (!id.startsWith('C') && !activeIds.has(id)) {
-      map.removeLayer(targetMarkers[id]);
-      delete targetMarkers[id];
-    }
-  });
+  // FIX 6: Only remove threat when covered
+  activeThreats = activeThreats.filter(t => !t.isCovered);
 
-  data.filter(t => t.active).forEach(t => {
+  // Update markers
+  activeThreats.forEach(t => {
     const pos = getTargetPos(t.id);
     const hasConflict = conflictSet.has(t.id);
     if (targetMarkers[t.id]) {
@@ -193,7 +194,16 @@ function renderEnvTargets(data, conflictTargetIds) {
     }
   });
 
-  envTargets = data;
+  // Cleanup old markers
+  const activeIds = new Set(activeThreats.map(t => t.id));
+  Object.keys(targetMarkers).forEach(id => {
+    if (!activeIds.has(id)) {
+      map.removeLayer(targetMarkers[id]);
+      delete targetMarkers[id];
+    }
+  });
+
+  envTargets = activeThreats;
   refreshThreatPanel();
 }
 
@@ -201,19 +211,43 @@ function renderEnvTargets(data, conflictTargetIds) {
 function spawnArc(sensorId, targetId, reward) {
   const sp = getSensorPos(sensorId);
   const tp = getTargetPos(targetId);
+  if (!sp || !tp) return; // FIX 7: Validation
+
   const color = reward > 0 ? '#4E6C50' : '#8B2E2E';
-  const line = L.polyline([sp, tp], { color, weight: 2, dashArray: '6 4', opacity: 0.85 }).addTo(map);
+  const line = L.polyline([sp, tp], { 
+      color, weight: 3, 
+      dashArray: null, // FIX 9: Solid for final assignment
+      opacity: 0.9 
+  }).addTo(map);
+  
   arcLines.push(line);
-  setTimeout(() => { map.removeLayer(line); }, 3000);
+  
+  // FIX 8: Fade effect
+  setTimeout(() => {
+    line.setStyle({ opacity: 0.3 });
+    setTimeout(() => { map.removeLayer(line); }, 1500);
+  }, 1000);
 }
 
 function spawnAgentArc(sensorId, targetId, agentId) {
   const sp = getSensorPos(sensorId);
   const tp = getTargetPos(targetId);
+  if (!sp || !tp) return; // FIX 7: Validation
+
   const color = AGENT_COLORS[agentId] || '#888';
-  const line = L.polyline([sp, tp], { color, weight: 2.5, dashArray: '8 4', opacity: 0.9 }).addTo(map);
+  const line = L.polyline([sp, tp], { 
+      color, weight: 2.5, 
+      dashArray: '5,5', // FIX 9: Dashed for proposal
+      opacity: 0.9 
+  }).addTo(map);
+
   agentArcLines.push(line);
-  setTimeout(() => { try { map.removeLayer(line); } catch(_){} }, 4000);
+  
+  // FIX 8: Fade effect
+  setTimeout(() => {
+    line.setStyle({ opacity: 0.3 });
+    setTimeout(() => { try { map.removeLayer(line); } catch(_){} }, 1500);
+  }, 1000);
 }
 
 // ── Map click to place custom threats ─────────────────────────────────────────
@@ -353,8 +387,18 @@ function updateMultiStats(stepRewards, agentRewards, conflictRate, conflicts, st
 
   // Conflict rate — color coding
   const crEl = document.getElementById('conflictRate');
+  const csEl = document.getElementById('coordinationScore');
+  const coordScore = 1.0 - conflictRate;
+  
   crEl.textContent = conflictRate.toFixed(3);
   crEl.className = 'conflict-rate-val' + (conflictRate > 0.5 ? ' cr-high' : conflictRate > 0.2 ? ' cr-med' : ' cr-ok');
+  
+  if (csEl) {
+    csEl.textContent = coordScore.toFixed(3);
+  }
+  
+  // FIX 13: Console log
+  console.log(`Conflict Rate: ${conflictRate}, Coordination Score: ${coordScore}`);
 
   // Step counter (share the same step display)
   mxStepCount = step;
@@ -549,7 +593,7 @@ async function runAll() {
   if (done) { await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING'); }
   while (!done) {
     await autoStep();
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 1200)); // FIX 10: Step delay
     if (done) break;
   }
 }
@@ -612,7 +656,7 @@ async function runAllMulti() {
   if (mxDone) { await loadTask(maxSteps, currentSeed, currentTask, 'RUNNING'); }
   while (!mxDone) {
     await autoMultiStep();
-    await new Promise(r => setTimeout(r, 350));
+    await new Promise(r => setTimeout(r, 1200)); // FIX 10: Step delay
     if (mxDone) break;
   }
 }
