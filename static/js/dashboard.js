@@ -775,9 +775,9 @@ async function runGradeMulti() {
   detail.innerHTML =
     `Efficiency&nbsp;&nbsp;: ${r.efficiency_score.toFixed(3)}<br>` +
     `Coordination: ${r.coordination_score.toFixed(3)}<br>` +
-    `<span style="color:#AA8B56">── per agent ──</span><br>` +
+    `<span style="color:#395144">── per agent ──</span><br>` +
     Object.entries(pa).map(([a, s]) =>
-      `<span style="color:${{'satellite':'#2563eb','drone':'#16a34a','radar':'#d97706','command':'#9333ea'}[a]||'#888'}">${a.padEnd(10)}</span>: ${s.toFixed(3)}`
+      `<span style="color:#395144">${a.padEnd(10)}</span>: ${s.toFixed(3)}`
     ).join('<br>');
   detail.style.display = 'block';
 }
