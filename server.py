@@ -35,8 +35,8 @@ command_agent = CommandAgent()
 
 
 _llm_client = None
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "HuggingFaceH4/zephyr-7b-beta")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 _base_model = None
@@ -561,7 +561,7 @@ def auto_multi():
         source = "agents"
 
     new_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
-    mx_obs = None if done else new_obs
+    mx_obs = new_obs  # keep obs even when done so state is readable
     conflict_rate = info["conflict_rate"]
     conflicts     = info["conflicts"]
 
