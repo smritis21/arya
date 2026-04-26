@@ -527,7 +527,7 @@ def register_custom_target():
 def grade():
     from tasks.grader import grade_episode
     body  = request.get_json(silent=True) or {}
-    steps = body.get("max_steps", env.max_steps)
+    steps = body.get("max_steps") or 20
     seed  = body.get("seed") or _random.randint(1, 99999)
     g_env = SentinelEnv(max_steps=steps, seed=seed)
     g_obs = g_env.reset()

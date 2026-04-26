@@ -751,7 +751,7 @@ async function runAllMulti() {
 async function runGrade() {
   document.getElementById('gradeVal').textContent = '...';
   document.getElementById('gradeSub').textContent = 'Computing...';
-  const r = await api('POST', '/grade', { max_steps: maxSteps });
+  const r = await api('POST', '/grade', { max_steps: maxSteps, seed: currentSeed });
   const pct = (r.score * 100).toFixed(1);
   document.getElementById('gradeVal').textContent = r.score.toFixed(4);
   document.getElementById('gradeSub').innerHTML = pct + '% &bull; ' + r.steps + ' steps &bull; reward ' + r.total_reward;
