@@ -20,7 +20,7 @@ pinned: true
 📊 **Reward Curve** → [reward_curve.png](./checkpoints/arya_x_lora/reward_curve.png)
 📝 **Full Technical Blog** → [BLOG.md](./BLOG.md)
 🎥 **Demo Video** → [Watch on YouTube](https://youtu.be/cRtbCRaNBFg)
-📊 **Slide Deck** → [Arya_Slide_Deck.pptx](./Arya_Slide_Deck.pptx)
+📊 **Slide Deck** → [Arya_Slide_Deck.pptx](https://github.com/smritis21/arya/raw/main/Arya_Slide_Deck.pptx)
 🏗️ **OpenEnv Spec** → [openenv.yaml](./openenv.yaml)
 
 ---
