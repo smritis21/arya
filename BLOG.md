@@ -2,8 +2,8 @@
 
 ### A writeup of Arya-X, our submission to the OpenEnv Hackathon Round 2 (Meta × Hugging Face × PyTorch, Bangalore 2026)
 
-🔗 Live App: https://sm21s-sentinel-env.hf.space/
-📦 HF Space: https://huggingface.co/spaces/sm21s/sentinel-env
+🔗 Live App: https://aryaxrl-aryax.hf.space/
+📦 HF Space: https://huggingface.co/spaces/AryaXRL/aryax
 
 ---
 
@@ -369,5 +369,5 @@ Arya-X is a step in that direction.
 *Theme #3.1: World Modeling / Professional Tasks — Partial Observability, Noise, Schema Drift.*
 *Theme #4: Self-Improvement — Adaptive Curriculum and Self-Play.*
 
-🔗 Live App: https://sm21s-sentinel-env.hf.space/
-📦 HF Space: https://huggingface.co/spaces/sm21s/sentinel-env
+🔗 Live App: https://aryaxrl-aryax.hf.space/
+📦 HF Space: https://huggingface.co/spaces/AryaXRL/aryax

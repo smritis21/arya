@@ -4,8 +4,8 @@
 
 ---
 
-🚀 **Live Demo** → [https://sm21s-sentinel-env.hf.space/](https://sm21s-sentinel-env.hf.space/)
-📦 **HF Space** → [huggingface.co/spaces/sm21s/sentinel-env](https://huggingface.co/spaces/sm21s/sentinel-env)
+🚀 **Live Demo** → [https://aryaxrl-aryax.hf.space/](https://aryaxrl-aryax.hf.space/)
+📦 **HF Space** → [huggingface.co/spaces/AryaXRL/aryax](https://huggingface.co/spaces/AryaXRL/aryax)
 🎓 **Training Notebook** → [Open in Colab](https://colab.research.google.com/drive/1WWX5skZToqne_rVulpE5vvR-lH_VK2gC?usp=sharing)
 🧠 **Trained LoRA Adapter** → [checkpoints/arya_x_lora/](./checkpoints/arya_x_lora/)
 📊 **Reward Curve** → [reward_curve.png](./checkpoints/arya_x_lora/reward_curve.png)
@@ -192,7 +192,7 @@ Difficulty within each phase is a continuous value [0.0, 1.0] that escalates whe
 
 ## Live Dashboard
 
-The dashboard at [https://sm21s-sentinel-env.hf.space/](https://sm21s-sentinel-env.hf.space/) shows everything in real time.
+The dashboard at [https://aryaxrl-aryax.hf.space/](https://aryaxrl-aryax.hf.space/) shows everything in real time.
 
 Four agents propose simultaneously. Each agent's assignments draw arcs in their own colour (🔵 Satellite · 🟢 Drone · 🟠 Radar · 🟣 Command). Conflicts trigger pulsing red rings on affected targets. The conflict log and live conflict rate update every step.
 
@@ -251,12 +251,12 @@ Defense and intelligence agencies running real sensor fleets. Autonomous drone s
 
 ### Live Demo (no setup)
 
-👉 [https://sm21s-sentinel-env.hf.space/](https://sm21s-sentinel-env.hf.space/)
+👉 [https://aryaxrl-aryax.hf.space/](https://aryaxrl-aryax.hf.space/)
 
 ### Run Locally
 
 ```bash
-git clone https://huggingface.co/spaces/sm21s/sentinel-env
+git clone https://huggingface.co/spaces/AryaXRL/aryax
 cd sentinel-env
 pip install -r requirements.txt
 
@@ -404,7 +404,7 @@ The CurriculumEngine runs three phases with continuous difficulty [0.0, 1.0] tha
 @misc{arya-x-2026,
   title   = {Arya-X: Multi-Agent ISR Sensor Allocation with Conflict-Aware GRPO Training},
   year    = {2026},
-  url     = {https://huggingface.co/spaces/sm21s/sentinel-env},
+  url     = {https://huggingface.co/spaces/AryaXRL/aryax},
   note    = {OpenEnv Hackathon Round 2 — Meta × Hugging Face × PyTorch, Bangalore 2026}
 }
 ```
@@ -412,4 +412,4 @@ The CurriculumEngine runs three phases with continuous difficulty [0.0, 1.0] tha
 ---
 
 *Built for the OpenEnv Hackathon Round 2, Bangalore 2026.*
-*🔗 Live: [https://sm21s-sentinel-env.hf.space/](https://sm21s-sentinel-env.hf.space/) · 📦 HF: [huggingface.co/spaces/sm21s/sentinel-env](https://huggingface.co/spaces/sm21s/sentinel-env) · 📝 Blog: [BLOG.md](./BLOG.md)*
+*🔗 Live: [https://aryaxrl-aryax.hf.space/](https://aryaxrl-aryax.hf.space/) · 📦 HF: [huggingface.co/spaces/AryaXRL/aryax](https://huggingface.co/spaces/AryaXRL/aryax) · 📝 Blog: [BLOG.md](./BLOG.md)*
