@@ -36,7 +36,7 @@ command_agent = CommandAgent()
 
 _llm_client = None
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 _base_model = None
