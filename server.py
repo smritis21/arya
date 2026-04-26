@@ -92,6 +92,7 @@ def init_local_models():
 
 # Initialize — try local adapter first, fall back to remote API
 print("\nInitializing Environment and Models...")
+print(f"[ENV] HF_TOKEN set: {bool(HF_TOKEN)}, MODEL_NAME: {MODEL_NAME}, API_BASE_URL: {API_BASE_URL}")
 init_local_models()
 
 if not _has_adapters:
