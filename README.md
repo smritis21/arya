@@ -19,6 +19,8 @@ pinned: true
 🧠 **Trained LoRA Adapter** → [checkpoints/arya_x_lora/](./checkpoints/arya_x_lora/)
 📊 **Reward Curve** → [reward_curve.png](./checkpoints/arya_x_lora/reward_curve.png)
 📝 **Full Technical Blog** → [BLOG.md](./BLOG.md)
+🎥 **Demo Video** → [Watch on YouTube](https://youtu.be/cRtbCRaNBFg)
+📊 **Slide Deck** → [Arya_Slide_Deck.pptx](./Arya_Slide_Deck.pptx)
 🏗️ **OpenEnv Spec** → [openenv.yaml](./openenv.yaml)
 
 ---
