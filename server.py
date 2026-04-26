@@ -309,8 +309,9 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
                 response = _llm_client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=128,
-                    temperature=0.0
+                    max_tokens=64,
+                    temperature=0.0,
+                    timeout=10
                 )
                 raw = response.choices[0].message.content.strip()
                 start, end = raw.find("["), raw.rfind("]") + 1
@@ -325,7 +326,7 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
             if proposals:
                 return proposals, "llm"
         except Exception as e:
-            print(f"[LLM multi] Error: {e}. Falling back to greedy.")
+            print(f"[LLM multi] Error: {e}. Falling back to greedy.", flush=True, file=sys.stderr)
 
     # Greedy fallback — shared used_sensors + used_targets prevents duplicates
     used_sensors = set()
@@ -544,7 +545,9 @@ def auto_multi():
         return jsonify({"error": "Call /reset_multi first"}), 400
 
     if _has_adapters or _llm_client:
+        print(f"[auto_multi] Using {'lora' if _has_adapters else 'llm'}", flush=True, file=sys.stderr)
         proposals, source = _get_multi_proposals(mx_obs)
+        print(f"[auto_multi] Got {len(proposals)} proposals from {source}", flush=True, file=sys.stderr)
     else:
         # Use wired agent classes (not raw greedy helper)
         proposals = []
