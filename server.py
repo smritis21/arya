@@ -35,8 +35,8 @@ command_agent = CommandAgent()
 
 
 _llm_client = None
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "microsoft/Phi-3.5-mini-instruct")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "HuggingFaceH4/zephyr-7b-beta")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 _base_model = None
