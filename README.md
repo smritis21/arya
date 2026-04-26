@@ -1,3 +1,12 @@
+---
+title: Arya-X
+emoji: 🛰️
+colorFrom: green
+colorTo: blue
+sdk: docker
+pinned: true
+---
+
 # Arya-X — Multi-Agent ISR Sensor Allocation
 
 > *Four AI agents. A limited sensor fleet. Threats spawning in real time. No communication allowed. Can they learn to stop fighting each other and start protecting the skies?*
