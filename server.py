@@ -36,7 +36,7 @@ command_agent = CommandAgent()
 
 _llm_client = None
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 _base_model = None
@@ -60,7 +60,7 @@ def init_local_models():
         print("[WARN] transformers or peft not installed. Will use greedy fallback.")
         return
 
-    checkpoint_dir = Path("./checkpoints/arya_x_lora_3")
+    checkpoint_dir = Path("./checkpoints/arya_x_lora")
     adapter_file = checkpoint_dir / "adapter_model.safetensors"
     if not adapter_file.exists():
         print(f"[WARN] No adapter found at {checkpoint_dir}. Will use greedy fallback.")

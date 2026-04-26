@@ -52,7 +52,7 @@ radar_agent = RadarAgent()
 command_agent = CommandAgent()
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Meta-Llama-3-8B-Instruct")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-0.5B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 client = None
