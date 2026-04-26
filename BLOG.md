@@ -4,6 +4,8 @@
 
 🔗 Live App: https://aryaxrl-aryax.hf.space/
 📦 HF Space: https://huggingface.co/spaces/AryaXRL/aryax
+🎥 **Demo Video** → [Watch on YouTube](https://youtu.be/cRtbCRaNBFg)
+📊 **Slide Deck** → [Arya_Slide_Deck.pptx](https://github.com/smritis21/arya/raw/main/Arya_Slide_Deck.pptx)
 
 ---
 
