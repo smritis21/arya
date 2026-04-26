@@ -11,8 +11,8 @@ COPY . .
 
 EXPOSE 7860
 
-ENV API_BASE_URL="https://api-inference.huggingface.co/v1" \
-    MODEL_NAME="HuggingFaceH4/zephyr-7b-beta"
+ENV API_BASE_URL="https://router.huggingface.co/v1" \
+    MODEL_NAME="meta-llama/Llama-3.2-3B-Instruct"
 
 # cache bust: 2026-04-26
 CMD ["gunicorn", "--bind", "0.0.0.0:7860", "--workers", "1", "--timeout", "120", "--log-level", "debug", "--capture-output", "server:app"]
