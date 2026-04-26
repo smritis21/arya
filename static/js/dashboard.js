@@ -297,6 +297,8 @@ function setMode(mode) {
   document.getElementById('multiControls').style.display   = mode === 'multi'  ? '' : 'none';
   document.getElementById('multiMetrics').style.display    = mode === 'multi'  ? '' : 'none';
   document.getElementById('conflictPanel').style.display   = mode === 'multi'  ? '' : 'none';
+  document.getElementById('singleGrade').style.display     = mode === 'single' ? '' : 'none';
+  document.getElementById('multiGrade').style.display      = mode === 'multi'  ? '' : 'none';
   if (mode === 'multi') fetchTrendData();
 
   document.querySelectorAll('.multi-legend').forEach(el => {
@@ -305,7 +307,7 @@ function setMode(mode) {
 
   addLog(`Switched to ${mode === 'multi' ? 'MULTI-AGENT' : 'SINGLE-AGENT'} mode`, 'log-neu');
 
-  if (mode === 'multi' && obsLoaded) {
+  if (obsLoaded) {
     const taskSteps =   { 'Easy': 20, 'Medium': 40, 'Hard': 60 };
     const taskSeeds =   { 'Easy': 42, 'Medium': 7,  'Hard': 13 };
     const taskThreats = { 'Easy': 'MONITORING', 'Medium': 'ELEVATED', 'Hard': 'CRITICAL' };
@@ -577,6 +579,12 @@ async function loadTask(steps, seed, name, threatLevel) {
   document.getElementById('scorePct').textContent = '0.000';
   document.getElementById('gradeVal').textContent = '--';
   document.getElementById('gradeSub').textContent = 'Run grader to evaluate';
+  const _mgv = document.getElementById('multiGradeVal');
+  const _mgs = document.getElementById('multiGradeSub');
+  const _mgd = document.getElementById('multiGradeDetail');
+  if (_mgv) _mgv.textContent = '--';
+  if (_mgs) _mgs.textContent = 'Run grader to evaluate';
+  if (_mgd) _mgd.style.display = 'none';
   ['rewardSatellite','rewardDrone','rewardRadar','rewardCommand'].forEach(id =>
     document.getElementById(id).textContent = '0.0');
   document.getElementById('conflictRate').textContent = '0.000';
@@ -649,8 +657,10 @@ async function autoStep() {
   const actions = r.actions || (r.action ? [r.action] : []);
   if (actions.length === 0) { if (r.done) showSummary(r.info); return; }
   actions.forEach(a => spawnArc(a.sensor_id, a.target_id, r.reward));
-  renderSensors(r.observation.sensors);
-  renderEnvTargets(r.observation.targets);
+  setTimeout(() => {
+    renderSensors(r.observation.sensors);
+    renderEnvTargets(r.observation.targets);
+  }, 1800);
   updateStats(r.reward, r.info);
   const c = r.reward > 0 ? 'log-pos' : r.reward < 0 ? 'log-neg' : 'log-neu';
   const agentTag = r.agent === 'llm' ? ' <span style="color:#AA8B56">[LLM]</span>' : ' <span style="opacity:0.5">[greedy]</span>';
@@ -691,10 +701,13 @@ async function autoMultiStep() {
   const conflictTargetIds = (r.conflicts || [])
     .filter(c => c.target_id).map(c => c.target_id);
 
-  if (cmdObs) {
-    renderSensors(cmdObs.sensors);
-    renderEnvTargets(cmdObs.targets, conflictTargetIds);
-  }
+  // Delay map update so arcs are visible before targets disappear
+  setTimeout(() => {
+    if (cmdObs) {
+      renderSensors(cmdObs.sensors);
+      renderEnvTargets(cmdObs.targets, conflictTargetIds);
+    }
+  }, 1800);
 
   // Update step / stats
   if (r.info) {
@@ -744,6 +757,31 @@ async function runGrade() {
   document.getElementById('gradeSub').innerHTML = pct + '% &bull; ' + r.steps + ' steps &bull; reward ' + r.total_reward;
 }
 
+async function runGradeMulti() {
+  document.getElementById('multiGradeVal').textContent = '...';
+  document.getElementById('multiGradeSub').textContent = 'Computing...';
+  document.getElementById('multiGradeDetail').style.display = 'none';
+  const r = await api('POST', '/grade_multi', { task: currentTask.toLowerCase(), seed: currentSeed, max_steps: maxSteps });
+  if (r.error) {
+    document.getElementById('multiGradeVal').textContent = 'ERR';
+    document.getElementById('multiGradeSub').textContent = r.error;
+    return;
+  }
+  const pct = (r.overall_score * 100).toFixed(1);
+  document.getElementById('multiGradeVal').textContent = r.overall_score.toFixed(4);
+  document.getElementById('multiGradeSub').innerHTML = pct + '% &bull; ' + r.steps + ' steps &bull; conflict ' + (r.conflict_rate * 100).toFixed(1) + '%';
+  const detail = document.getElementById('multiGradeDetail');
+  const pa = r.per_agent_scores || {};
+  detail.innerHTML =
+    `Efficiency&nbsp;&nbsp;: ${r.efficiency_score.toFixed(3)}<br>` +
+    `Coordination: ${r.coordination_score.toFixed(3)}<br>` +
+    `<span style="color:#AA8B56">── per agent ──</span><br>` +
+    Object.entries(pa).map(([a, s]) =>
+      `<span style="color:${{'satellite':'#2563eb','drone':'#16a34a','radar':'#d97706','command':'#9333ea'}[a]||'#888'}">${a.padEnd(10)}</span>: ${s.toFixed(3)}`
+    ).join('<br>');
+  detail.style.display = 'block';
+}
+
 function closeSummary() {
   document.getElementById('summaryModal').style.display = 'none';
 }
@@ -787,43 +825,38 @@ window.addEventListener('load', () => {
 let _trendChart = null;
 
 async function fetchTrendData() {
-  if (typeof Chart === 'undefined') return;
+  if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
   const wrap = document.getElementById('summaryChartWrap');
   const canvas = document.getElementById('trendChart');
   if (!wrap || !canvas) return;
-  wrap.style.display = 'block';
-
-  // Destroy stale instance
   if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
-
   let data;
-  try {
-    data = await fetch('/metrics/history').then(r => r.json());
-  } catch (_) { return; }
-  if (!Array.isArray(data) || data.length === 0) return;
+  try { data = await fetch('/metrics/history').then(r => r.json()); } catch (_) { return; }
+  if (!Array.isArray(data) || data.length === 0) { wrap.innerHTML = '<p style="color:#888;font-size:11px;text-align:center">No training data yet</p>'; return; }
+  wrap.style.display = 'block';
 
   _trendChart = new Chart(canvas, {
     type: 'line',
     data: {
-      labels: data.map(d => 'S' + d.step),
+      labels: data.map(d => 'EP' + (d.episode || d.step)),
       datasets: [
         {
-          label: 'Reward',
+          label: 'Total Reward',
           data: data.map(d => d.reward),
           borderColor: '#e11d48',
           backgroundColor: 'rgba(225,29,72,0.08)',
           borderWidth: 2, pointRadius: 3, tension: 0.3, yAxisID: 'y',
         },
         {
-          label: 'Reward Std',
-          data: data.map(d => d.reward_std),
+          label: 'Coordination Score',
+          data: data.map(d => d.coordination_score),
           borderColor: '#16a34a',
           backgroundColor: 'rgba(22,163,74,0.08)',
           borderWidth: 1.5, pointRadius: 2, tension: 0.3, yAxisID: 'y2',
         },
         {
-          label: 'KL ×1000',
-          data: data.map(d => +(d.kl * 1000).toFixed(4)),
+          label: 'Conflict Rate',
+          data: data.map(d => d.conflict_rate),
           borderColor: '#AA8B56',
           borderWidth: 1.5, pointRadius: 2, tension: 0.3,
           borderDash: [4, 3], yAxisID: 'y2',
@@ -840,7 +873,7 @@ async function fetchTrendData() {
         y: { position: 'left', ticks: { color: '#e11d48', font: { size: 9 } }, grid: { color: '#2a2a2a' },
              title: { display: true, text: 'reward', color: '#e11d48', font: { size: 8 } } },
         y2: { position: 'right', ticks: { color: '#16a34a', font: { size: 9 } }, grid: { drawOnChartArea: false },
-              title: { display: true, text: 'std/kl', color: '#16a34a', font: { size: 8 } } }
+              title: { display: true, text: 'coord/conflict', color: '#16a34a', font: { size: 8 } } }
       }
     }
   });

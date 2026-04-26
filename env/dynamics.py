@@ -84,10 +84,15 @@ def spawn_targets_stochastic(step: int, seed: int = 42, density_factor: float = 
         count = 5   # Medium
     else:
         count = 8   # Hard
-    # Guarantee at least one P3 target per step
+    # Guarantee at least one P3 target per step but at random position
     targets = []
+    p3_placed = False
     for i in range(count):
-        priority = 3 if i == 0 else rng.randint(1, 3)
+        if not p3_placed and (i == count - 1 or rng.random() < 0.4):
+            priority = 3
+            p3_placed = True
+        else:
+            priority = rng.randint(1, 3)
         targets.append(Target(
             id=f"T{step}_{i+1}",
             priority=priority,

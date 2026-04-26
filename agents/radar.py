@@ -32,25 +32,10 @@ class RadarAgent(BaseAgent):
             k: v for k, v in self._persistent_targets.items() if k in active_ids
         }
 
-        # Targets covered 2+ consecutive steps by radar → lock on them first
-        persistent = [t for t in targets if self._persistent_targets.get(t.id, 0) >= 2]
-
-        # Airspace (odd index) non-persistent
-        airspace_fresh = [
-            t for t in targets
-            if self._is_airspace(t.id) and t not in persistent
-        ]
-        airspace_fresh.sort(key=lambda t: -t.priority)
-
-        # Non-airspace
-        non_airspace = [
-            t for t in targets
-            if not self._is_airspace(t.id) and t not in persistent
-        ]
-        non_airspace.sort(key=lambda t: -t.priority)
-
-        # Priority queue: persistent → airspace fresh → non-airspace
-        priority_queue = persistent + airspace_fresh + non_airspace
+        # Prefer airspace targets (radar specialization), then by priority
+        airspace = sorted([t for t in targets if t.type == "airspace"], key=lambda t: -t.priority)
+        other    = sorted([t for t in targets if t.type != "airspace"], key=lambda t: -t.priority)
+        priority_queue = airspace + other
 
         # Exclude targets covered in the very last step (spread coverage)
         last_covered = set()

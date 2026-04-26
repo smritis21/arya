@@ -36,7 +36,7 @@ command_agent = CommandAgent()
 
 _llm_client = None
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "meta-llama/Llama-3.2-3B-Instruct")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN")
 
 _base_model = None
@@ -120,7 +120,8 @@ def _build_prompt(observation) -> str:
     n = sum(1 for s in observation.sensors if s.available)
     return f"""You are a military sensor allocation AI. Assign ALL available sensors to threats.
 Priority 3=HIGH (missile/critical), 2=MED (border movement), 1=LOW (airspace).
-Always cover HIGH priority threats first. Each sensor must go to a DIFFERENT target.
+Always cover HIGH priority threats first, then MED, then LOW. ALWAYS assign every available sensor to SOME target — never leave sensors idle.
+Each sensor must go to a DIFFERENT target.
 
 Timestep: {observation.timestep}
 
@@ -130,16 +131,14 @@ Available Sensors ({n}):
 Active Threats:
 {targets}
 
-Respond ONLY with a JSON array of assignments, one per available sensor:
+Respond ONLY with a raw JSON array, no code fences, no explanation:
 [{{"sensor_id": "S1", "target_id": "T0_1"}}, {{"sensor_id": "S2", "target_id": "T0_2"}}]
 """
 
 
 def _parse_llm_actions(text: str, observation) -> list[Action]:
     try:
-        start = text.find("[")
-        end   = text.rfind("]") + 1
-        data  = json.loads(text[start:end])
+        data = _extract_json_array(text)
         valid_sensors = {s.id for s in observation.sensors if s.available}
         valid_targets = {t.id for t in observation.targets if t.active}
         actions, used_sensors, used_targets = [], set(), set()
@@ -153,6 +152,8 @@ def _parse_llm_actions(text: str, observation) -> list[Action]:
         return actions
     except Exception:
         return []
+
+_parse_llm_actions_text = _parse_llm_actions
 
 
 def _greedy_actions(observation) -> list[Action]:
@@ -179,7 +180,10 @@ def _get_actions(observation) -> tuple[list[Action], str]:
                 temperature=0.0
             )
             raw     = response.choices[0].message.content.strip()
-            actions = _parse_llm_actions(raw, observation)
+            try:
+                actions = _parse_llm_actions_text(raw, observation)
+            except Exception:
+                actions = []
             if actions:
                 return actions, "llm"
             print(f"[LLM] Bad response, falling back. Raw: {raw!r}")
@@ -189,42 +193,116 @@ def _get_actions(observation) -> tuple[list[Action], str]:
 
 
 # ── Multi-agent helpers ───────────────────────────────────────────────────────
+AGENT_ROLE = {
+    "satellite": ("strategic wide-area surveillance", "strategic"),
+    "drone":     ("tactical kinetic tracking",        "kinetic"),
+    "radar":     ("airspace precision monitoring",    "airspace"),
+    "command":   ("strategic override and gap-filling", "any"),
+}
+
 def _build_multi_prompt(agent_id: str, agent_obs, used_sensors: set = None) -> str:
     used_sensors = used_sensors or set()
+    role_desc, preferred_type = AGENT_ROLE.get(agent_id, ("sensor allocation", "any"))
     my_sensors = [
         s for s in agent_obs.sensors
         if s["available"] and s["id"] not in used_sensors
         and (agent_id == "command" or s["type"] == agent_id)
     ]
+    if not my_sensors:
+        return ""
     sensors = "\n".join(
         f"  - id={s['id']} type={s['type']} range={s['range']}km"
         for s in my_sensors
     )
+    active_targets = [t for t in agent_obs.targets if t["active"]]
+    # Sort by: preferred type first, then priority, then distance from this agent's sensor
+    sensor_id = my_sensors[0]['id'] if my_sensors else 'S1'
+    active_targets_sorted = sorted(active_targets, key=lambda t: (
+        0 if t.get('type') == preferred_type else 1,
+        -t['priority'],
+        _dist(sensor_id, t['id'])
+    ))
     targets = "\n".join(
-        f"  - id={t['id']} priority={t['priority']}"
-        for t in agent_obs.targets if t["active"]
+        f"  - id={t['id']} priority={t['priority']} type={t.get('type','?')}"
+        for t in active_targets_sorted
     )
-    if not my_sensors:
-        return ""
-    return f"""You are the {agent_id} agent in a multi-agent ISR system.
-You may ONLY assign YOUR sensors listed below. Do NOT use sensors belonging to other agents.
-Priority 3=HIGH, 2=MED, 1=LOW. Cover HIGH threats first.
+    valid_tids = [t['id'] for t in active_targets_sorted]
+    example_sid = my_sensors[0]['id']
+    example_tid = active_targets_sorted[0]['id'] if active_targets_sorted else 'T_X'
+    type_hint = f" Prefer targets of type '{preferred_type}', but assign to ANY target if none of that type exist." if preferred_type != "any" else " Cover uncovered gaps, any priority."
+    return f"""You are the {agent_id} agent specializing in {role_desc}.{type_hint}
+You MUST assign your sensor to a target. NEVER return an empty array — always pick the best available target.
+Other agents cover different threats. Pick the highest-priority uncovered target you can see.
 
 Timestep: {agent_obs.timestep}
-
-Your sensors ({agent_id} type only):
-{sensors}
-
-Active Threats:
+Your sensor: {sensors}
+Visible threats (target_ids MUST be from this list {valid_tids}):
 {targets}
 
-Respond ONLY with a JSON array using only your sensors above:
-[{{"sensor_id": "S1", "target_id": "T0_1"}}]
+Respond with ONLY a raw JSON array, no code fences, no explanation:
+[{{"sensor_id": "{example_sid}", "target_id": "{example_tid}"}}]
 """
 
 
+# Fixed sensor positions matching dashboard SENSOR_POS
+_SENSOR_POS = {
+    "S1": (28.6, 77.2), "S2": (19.0, 72.8), "S3": (13.0, 80.3),
+    "S4": (22.5, 88.3), "S5": (17.4, 78.5), "S6": (26.9, 75.8),
+    "S7": (23.0, 72.6), "S8": (12.9, 74.8),
+}
+THREAT_ZONES = [
+    (34.5, 74.0), (32.0, 77.5), (28.0, 97.5), (23.5, 91.5),
+    (22.0, 69.0), (27.5, 88.5), (30.5, 71.0), (15.0, 74.0)
+]
+
+def _target_pos(tid: str) -> tuple:
+    h = 0
+    for c in tid:
+        h = (h * 31 + ord(c)) & 0xffff
+    base = THREAT_ZONES[h % len(THREAT_ZONES)]
+    return (base[0] + (((h >> 4) & 0xff) / 255 - 0.5) * 3,
+            base[1] + (((h >> 8) & 0xff) / 255 - 0.5) * 3)
+
+def _dist(sid: str, tid: str) -> float:
+    sp = _SENSOR_POS.get(sid, (20, 78))
+    tp = _target_pos(tid)
+    return ((sp[0]-tp[0])**2 + (sp[1]-tp[1])**2) ** 0.5
+
+
+def _extract_json_array(raw: str) -> list:
+    """Extract first valid JSON array from LLM response, handling code fences."""
+    # Strip markdown code fences
+    text = raw
+    if '```' in text:
+        # grab content between first ``` block
+        parts = text.split('```')
+        for part in parts:
+            part = part.strip()
+            if part.startswith('json'):
+                part = part[4:].strip()
+            start = part.find('[')
+            end   = part.rfind(']') + 1
+            if start != -1 and end > start:
+                try:
+                    return json.loads(part[start:end])
+                except Exception:
+                    continue
+    start = text.find('[')
+    end   = text.rfind(']') + 1
+    if start == -1 or end <= start:
+        raise ValueError('no JSON array')
+    return json.loads(text[start:end])
+
+
+AGENT_PREFERRED_TYPE = {
+    "satellite": "strategic",
+    "drone":     "kinetic",
+    "radar":     "airspace",
+    "command":   None,
+}
+
 def _greedy_proposals(agent_id: str, agent_obs, used_sensors: set, used_targets: set = None) -> list[Proposal]:
-    """Greedy proposals for one agent — only claim sensors matching agent type."""
+    """Greedy proposals — picks by agent type affinity first, then priority."""
     if used_targets is None:
         used_targets = set()
     my_sensors = [
@@ -232,21 +310,21 @@ def _greedy_proposals(agent_id: str, agent_obs, used_sensors: set, used_targets:
         if s["available"] and s["id"] not in used_sensors
         and (agent_id == "command" or s["type"] == agent_id)
     ]
-    targets = sorted(
-        [t for t in agent_obs.targets if t["active"]],
-        key=lambda t: -t["priority"]
-    )
+    preferred = AGENT_PREFERRED_TYPE.get(agent_id)
+    active = [t for t in agent_obs.targets if t["active"] and t["id"] not in used_targets]
+    # Sort: preferred type first, then by priority desc, then by distance asc
+    targets = sorted(active, key=lambda t: (
+        0 if t["type"] == preferred else 1,
+        -t["priority"],
+        _dist(my_sensors[0]["id"] if my_sensors else "S1", t["id"])
+    ))
     proposals = []
     for sensor in my_sensors:
-        for target in targets:
-            if target["id"] not in used_targets:
-                proposals.append(Proposal(
-                    agent_id=agent_id,
-                    sensor_id=sensor["id"],
-                    target_id=target["id"]
-                ))
-                used_targets.add(target["id"])
-                break
+        if targets:
+            t = targets[0]
+            proposals.append(Proposal(agent_id=agent_id, sensor_id=sensor["id"], target_id=t["id"]))
+            used_targets.add(t["id"])
+            targets = targets[1:]
     return proposals
 
 
@@ -266,10 +344,7 @@ def _lora_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
             raw = _tokenizer.decode(outputs[0], skip_special_tokens=True)
             if "assistant" in raw:
                 raw = raw.split("assistant")[-1].strip()
-            start, end = raw.find("["), raw.rfind("]") + 1
-            if start == -1 or end == 0:
-                raise ValueError("no JSON array")
-            items = json.loads(raw[start:end])
+            items = _extract_json_array(raw)
             valid_sensors = {s["id"] for s in agent_obs.sensors if s["available"] and s["id"] not in used_sensors}
             valid_targets = {t["id"] for t in agent_obs.targets if t["active"] and t["id"] not in used_targets}
             for item in items:
@@ -295,48 +370,60 @@ def _get_multi_proposals(agent_obs_map) -> tuple[list[Proposal], str]:
     """Build proposals from all agents. Returns (proposals, source)."""
     proposals: list[Proposal] = []
     used_sensors: set = set()
+    used_targets: set = set()
+    source = "greedy"
 
     if _has_adapters:
         return _lora_multi_proposals(agent_obs_map)
 
-    if _llm_client and not _has_adapters: # API fallback
-        try:
-            for agent_id in AGENT_TYPES:
-                agent_obs = agent_obs_map[agent_id]
-                prompt = _build_multi_prompt(agent_id, agent_obs, used_sensors)
+    if _llm_client and not _has_adapters:
+        llm_proposals: list[Proposal] = []
+        llm_used_sensors: set = set()
+        llm_used_targets: set = set()
+        for agent_id in AGENT_TYPES:
+            agent_obs = agent_obs_map[agent_id]
+            accepted = False
+            try:
+                prompt = _build_multi_prompt(agent_id, agent_obs, llm_used_sensors)
                 if not prompt:
                     continue
                 response = _llm_client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=64,
-                    temperature=0.0,
+                    temperature=0.7,
                     timeout=10
                 )
                 raw = response.choices[0].message.content.strip()
-                start, end = raw.find("["), raw.rfind("]") + 1
-                items = json.loads(raw[start:end])
-                my_sensors = {s["id"] for s in agent_obs.sensors if s["available"] and s["id"] not in used_sensors and (agent_id == "command" or s["type"] == agent_id)}
-                valid_targets = {t["id"] for t in agent_obs.targets if t["active"]}
+                if not raw:
+                    raise ValueError("empty response")
+                items = _extract_json_array(raw)
+                my_sensors = {s["id"] for s in agent_obs.sensors if s["available"] and s["id"] not in llm_used_sensors and (agent_id == "command" or s["type"] == agent_id)}
+                valid_targets = {t["id"] for t in agent_obs.targets if t["active"] and t["id"] not in llm_used_targets}
                 for item in items:
                     sid, tid = item.get("sensor_id"), item.get("target_id")
                     if sid in my_sensors and tid in valid_targets:
-                        proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
-                        used_sensors.add(sid)
-            if proposals:
-                return proposals, "llm"
-        except Exception as e:
-            print(f"[LLM multi] Error: {e}. Falling back to greedy.", flush=True, file=sys.stderr)
+                        llm_proposals.append(Proposal(agent_id=agent_id, sensor_id=sid, target_id=tid))
+                        llm_used_sensors.add(sid)
+                        llm_used_targets.add(tid)
+                        accepted = True
+                        break
+            except Exception as e:
+                print(f"[LLM {agent_id}] Error: {e}", flush=True, file=sys.stderr)
+            if not accepted:
+                for p in _greedy_proposals(agent_id, agent_obs, llm_used_sensors, llm_used_targets):
+                    llm_proposals.append(p)
+                    llm_used_sensors.add(p.sensor_id)
+                    llm_used_targets.add(p.target_id)
+                    break
+        return llm_proposals, "llm"
 
-    # Greedy fallback — shared used_sensors + used_targets prevents duplicates
-    used_sensors = set()
-    used_targets: set = set()
+    # Pure greedy fallback — each agent independently picks highest-priority target
     cmd_obs = agent_obs_map["command"]
     for agent_id in AGENT_TYPES:
-        for p in _greedy_proposals(agent_id, cmd_obs, used_sensors, used_targets):
+        for p in _greedy_proposals(agent_id, cmd_obs, used_sensors, set()):
             proposals.append(p)
             used_sensors.add(p.sensor_id)
-            used_targets.add(p.target_id)
 
     return proposals, "greedy"
 
@@ -456,6 +543,60 @@ def grade():
 
 
 # ── Multi-agent routes ────────────────────────────────────────────────────────
+@app.post("/grade_multi")
+def grade_multi():
+    from tasks.grader import grade_multi_agent_episode
+    body       = request.get_json(silent=True) or {}
+    max_steps  = body.get("max_steps", 20)
+    seed       = body.get("seed", 42)
+    task       = body.get("task", "easy")  # easy | medium | hard
+
+    task_cfg = {"easy": (20, 42, 1.5, 0.0), "medium": (40, 7, 2.5, 0.05), "hard": (60, 13, 4.0, 0.15)}
+    steps, seed, density, fail_prob = task_cfg.get(task, task_cfg["easy"])
+    if body.get("max_steps"): steps = body["max_steps"]
+    if body.get("seed"):      seed  = body["seed"]
+
+    g_env = AryaXEnv(max_steps=steps, seed=seed, density_factor=density,
+                     failure_prob=fail_prob, mode='single')
+    obs_map = g_env.reset()
+    done = False
+
+    from env.models import AgentObservation as ModelObs, Sensor as ModelSensor, Target as ModelTarget
+    _sat = SatelliteAgent(); _drone = DroneAgent()
+    _radar = RadarAgent();   _cmd = CommandAgent()
+
+    while not done:
+        props = []
+        for aid, agent in [("satellite", _sat), ("drone", _drone), ("radar", _radar)]:
+            raw = obs_map[aid]
+            agent.observe(ModelObs(
+                agent_id=raw.agent_id, agent_type=raw.agent_type,
+                sensors=[ModelSensor(**s) for s in raw.sensors],
+                targets=[ModelTarget(**t) for t in raw.targets],
+                timestep=raw.timestep, conflict_history=[]
+            ))
+            props += agent.propose()
+        raw_cmd = obs_map["command"]
+        _cmd.observe(ModelObs(
+            agent_id="command", agent_type="command",
+            sensors=[ModelSensor(**s) for s in raw_cmd.sensors],
+            targets=[ModelTarget(**t) for t in raw_cmd.targets],
+            timestep=raw_cmd.timestep, conflict_history=[]
+        ), proposals=props)
+        props += _cmd.propose()
+        filtered = _filter_proposals(props, obs_map)
+        obs_map, _, done, _ = g_env.step_multiagent(props, filtered)
+
+    result = grade_multi_agent_episode(
+        per_agent_rewards=g_env._agent_rewards,
+        step_count=g_env.current_step,
+        num_sensors=g_env.initial_sensor_count,
+        negotiation_layer=g_env.negotiation,
+        num_agents=4,
+    )
+    return jsonify({**result, "task": task, "seed": seed, "steps": g_env.current_step})
+
+
 @app.post("/reset_multi")
 def reset_multi():
     global mx_obs
@@ -517,23 +658,28 @@ def step_multi():
 
 
 def _filter_proposals(proposals: list, agent_obs_map: dict) -> list:
-    """Drop any proposal where the agent claims a sensor not matching their type."""
+    """One valid proposal per agent: correct sensor type, no duplicate sensors or targets."""
     filtered = []
-    used_sensors, used_targets = set(), set()
+    used_sensors, used_agents, used_targets = set(), set(), set()
+    # Build global sensor type map from command obs (sees all sensors)
+    cmd_obs = agent_obs_map.get("command")
+    global_sensor_types = {s["id"]: s["type"] for s in cmd_obs.sensors} if cmd_obs else {}
     for p in proposals:
         agent_id = p.agent_id
-        agent_obs = agent_obs_map.get(agent_id)
-        if not agent_obs:
+        if agent_id in used_agents:
             continue
-        sensor_type = next((s["type"] for s in agent_obs.sensors if s["id"] == p.sensor_id), None)
+        sensor_type = global_sensor_types.get(p.sensor_id)
         if sensor_type is None:
             continue
         if agent_id != "command" and sensor_type != agent_id:
-            continue  # wrong sensor type for this agent
-        if p.sensor_id in used_sensors or p.target_id in used_targets:
+            continue
+        if p.sensor_id in used_sensors:
+            continue
+        if p.target_id in used_targets:
             continue
         filtered.append(p)
         used_sensors.add(p.sensor_id)
+        used_agents.add(agent_id)
         used_targets.add(p.target_id)
     return filtered
 
@@ -544,30 +690,52 @@ def auto_multi():
     if mx_obs is None:
         return jsonify({"error": "Call /reset_multi first"}), 400
 
-    if _has_adapters or _llm_client:
-        print(f"[auto_multi] Using {'lora' if _has_adapters else 'llm'}", flush=True, file=sys.stderr)
-        proposals, source = _get_multi_proposals(mx_obs)
-        print(f"[auto_multi] Got {len(proposals)} proposals from {source}", flush=True, file=sys.stderr)
-    else:
-        # Use wired agent classes (not raw greedy helper)
-        proposals = []
-        all_props = []
-        for agent_id, agent in [("satellite", sat_agent), ("drone", drone_agent), ("radar", radar_agent)]:
-            agent.observe(mx_obs[agent_id])
-            all_props += agent.propose()
-        command_agent.observe(mx_obs["command"], proposals=all_props)
-        all_props += command_agent.propose()
-        proposals = all_props
-        source = "agents"
+    all_props = []
+    source = "agents"
 
-    new_obs, step_rewards, done, info = mx_env.step_multiagent(proposals)
-    mx_obs = new_obs  # keep obs even when done so state is readable
+    if _llm_client and not _has_adapters:
+        # Use LLM-backed _get_multi_proposals when remote API is available
+        all_props, source = _get_multi_proposals(mx_obs)
+    else:
+        # Wired specialist agents with shared coordination signal
+        from env.models import AgentObservation as ModelObs, Sensor as ModelSensor, Target as ModelTarget
+        _coord_used_targets: set = set()  # shared across all agents this step
+        for agent_id, agent in [("satellite", sat_agent), ("drone", drone_agent), ("radar", radar_agent)]:
+            raw = mx_obs[agent_id]
+            # Mask out already-claimed targets from this agent's observation
+            filtered_targets = [t for t in raw.targets if t["id"] not in _coord_used_targets]
+            agent.observe(ModelObs(
+                agent_id=raw.agent_id, agent_type=raw.agent_type,
+                sensors=[ModelSensor(**s) for s in raw.sensors],
+                targets=[ModelTarget(**t) for t in filtered_targets],
+                timestep=raw.timestep, conflict_history=[]
+            ))
+            new_props = agent.propose()
+            for p in new_props:
+                _coord_used_targets.add(p.target_id)
+            all_props += new_props
+        raw_cmd = mx_obs["command"]
+        filtered_cmd_targets = [t for t in raw_cmd.targets if t["id"] not in _coord_used_targets]
+        cmd_obs = ModelObs(
+            agent_id="command", agent_type="command",
+            sensors=[ModelSensor(**s) for s in raw_cmd.sensors],
+            targets=[ModelTarget(**t) for t in filtered_cmd_targets],
+            timestep=raw_cmd.timestep, conflict_history=[]
+        )
+        command_agent.observe(cmd_obs, proposals=all_props)
+        all_props += command_agent.propose()
+
+    print(f"[auto_multi] Got {len(all_props)} proposals from {source}", flush=True, file=sys.stderr)
+
+    filtered_proposals = _filter_proposals(all_props, mx_obs)
+    new_obs, step_rewards, done, info = mx_env.step_multiagent(all_props, filtered_proposals)
+    mx_obs = new_obs
     conflict_rate = info["conflict_rate"]
     conflicts     = info["conflicts"]
 
     return jsonify({
         "proposals":         [{"agent_id": p.agent_id, "sensor_id": p.sensor_id,
-                               "target_id": p.target_id} for p in proposals],
+                               "target_id": p.target_id} for p in filtered_proposals],
         "agent":             source,
         "observations":      {k: v.to_dict() for k, v in new_obs.items()},
         "step_rewards":      step_rewards,
@@ -583,7 +751,9 @@ def auto_multi():
 # ── Metrics history endpoint ─────────────────────────────────────────────────
 @app.get("/metrics/history")
 def metrics_history():
-    metrics_path = Path("./logs/training_metrics.json")
+    metrics_path = Path("./checkpoints/arya_x_lora/training_metrics.json")
+    if not metrics_path.exists():
+        metrics_path = Path("./logs/training_metrics.json")
     if not metrics_path.exists():
         return jsonify([])
     try:
@@ -602,10 +772,6 @@ def metrics_history():
 @app.get("/ui")
 def ui():
     return render_template("dashboard.html")
-
-@app.get("/game")
-def game():
-    return render_template("game.html")
 
 
 if __name__ == "__main__":

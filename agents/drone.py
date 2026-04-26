@@ -22,54 +22,26 @@ class DroneAgent(BaseAgent):
         sensors = [s for s in self._available_sensors() if s.type == "drone"]
         targets = [t for t in self._active_targets() if t.priority >= 2]
 
-        # Theory-of-mind: back off boundary targets after losing 3+ redundant_coverage
-        radar_wins = self.losses.get("redundant_coverage", 0)
-        retreat_boundary = radar_wins >= 3
-
-        # Sort: closest (lowest index) first, then by priority descending
         targets_sorted = sorted(
             targets,
-            key=lambda t: (self._proximity_score(t.id), -t.priority)
+            key=lambda t: (0 if t.type == "kinetic" else 1, -t.priority)
         )
+        if not targets_sorted:
+            targets_sorted = sorted(self._active_targets(), key=lambda t: -t.priority)
 
         proposals = []
         used_targets: set = set()
         for sensor in sensors:
             for target in targets_sorted:
-                if target.id in used_targets:
-                    continue
-                is_boundary = self._is_boundary(target.id)
-                if retreat_boundary and is_boundary:
-                    continue  # skip boundary targets when radar dominates
-                confidence = 0.85
-                if is_boundary:
-                    confidence -= 0.2  # lower confidence on boundary anyway
-                proposals.append(Proposal(
-                    sensor_id=sensor.id,
-                    target_id=target.id,
-                    agent_id=self.agent_id,
-                    priority_estimate=target.priority,
-                    confidence=round(confidence, 3),
-                ))
-                used_targets.add(target.id)
-                break
-
-        # Fallback: if no P2+ targets available, cover the closest P1
-        if not proposals and sensors:
-            p1_targets = sorted(
-                [t for t in self._active_targets() if t.priority == 1],
-                key=lambda t: self._proximity_score(t.id)
-            )
-            for sensor in sensors:
-                if p1_targets:
-                    target = p1_targets[0]
+                if target.id not in used_targets:
                     proposals.append(Proposal(
                         sensor_id=sensor.id,
                         target_id=target.id,
                         agent_id=self.agent_id,
                         priority_estimate=target.priority,
-                        confidence=0.50,
+                        confidence=0.85,
                     ))
+                    used_targets.add(target.id)
                     break
 
         self.recent_assignments.append({

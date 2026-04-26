@@ -396,13 +396,8 @@ def run_multi_task(name: str, env: AryaXEnv) -> float:
         # Step env with resolved assignments
         obs_map, step_rewards, done, info = env.step_multiagent(proposal_objs)
         steps_taken += 1
-
-        # Compute per-agent rewards via RewardEngine
-        re_rewards = reward_eng.compute_step_reward(
-            neg_result.final_assignments, neg_result, world_state, list(AGENT_TYPES)
-        )
         for aid in AGENT_TYPES:
-            total_rewards[aid] += re_rewards.get(aid, 0.0)
+            total_rewards[aid] += step_rewards.get(aid, 0.0)
 
         # Log conflicts
         n_conflicts = len(neg_result.conflicts_detected)

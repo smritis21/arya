@@ -34,6 +34,7 @@ modes:
       reset:  /reset_multi
       step:   /step_multi
       auto:   /auto_multi
+      grade:  /grade_multi
 
 # ── Observation schema (multi-agent) ─────────────────────────────────────────
 observation_schema:

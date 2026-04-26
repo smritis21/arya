@@ -161,7 +161,11 @@ class AryaXEnv:
     def step_multiagent(
         self,
         proposals: List[Proposal],
+        filtered_proposals: List[Proposal] = None,
     ) -> Tuple[Dict[str, AgentObservation], Dict[str, float], bool, dict]:
+        # proposals = raw agent proposals (used for conflict detection)
+        # filtered_proposals = deduplicated proposals (used for execution)
+        exec_proposals = filtered_proposals if filtered_proposals is not None else proposals
         # Build world_state for interaction/ pipeline
         sensors_dict  = [s.model_dump() for s in self.sensors]
         targets_dict  = [t.model_dump() for t in self.targets]
@@ -172,17 +176,28 @@ class AryaXEnv:
         }
         
         proposals_raw = []
-        for p in proposals:
+        for p in proposals:  # raw proposals → conflict detection
             sensor_type = next((getattr(s, "type", "unknown") for s in self.sensors if s.id == p.sensor_id), "unknown")
             target_type = next((getattr(t, "type", "strategic") for t in self.targets if t.id == p.target_id), "strategic")
             cap_score = CAPABILITY_MATRIX.get((sensor_type, target_type), 0.5)
             proposals_raw.append({
-                "agent_id": p.agent_id, 
+                "agent_id": p.agent_id,
                 "sensor_id": p.sensor_id,
-                "target_id": p.target_id, 
+                "target_id": p.target_id,
                 "capability_score": cap_score
             })
-        assigned_sids = {p.sensor_id for p in proposals}
+        exec_raw = []
+        for p in exec_proposals:  # filtered proposals → execution
+            sensor_type = next((getattr(s, "type", "unknown") for s in self.sensors if s.id == p.sensor_id), "unknown")
+            target_type = next((getattr(t, "type", "strategic") for t in self.targets if t.id == p.target_id), "strategic")
+            cap_score = CAPABILITY_MATRIX.get((sensor_type, target_type), 0.5)
+            exec_raw.append({
+                "agent_id": p.agent_id,
+                "sensor_id": p.sensor_id,
+                "target_id": p.target_id,
+                "capability_score": cap_score
+            })
+        assigned_sids = {p.sensor_id for p in exec_proposals}
         idle_sensors  = [s["id"] for s in sensors_dict if s["id"] not in assigned_sids]
         world_state = {
             "sensors":      sensors_dict,
@@ -192,19 +207,16 @@ class AryaXEnv:
             "proposals":    proposals_raw,
         }
 
-        # Run full negotiation pipeline (interaction/)
+        # Detect conflicts on RAW proposals, resolve+execute on filtered
         neg_result = self.negotiation.negotiate(proposals_raw, world_state, _cmd_override)
+        # Re-run negotiation for execution using filtered proposals
+        exec_world_state = {**world_state, "proposals": exec_raw, "idle_sensors": idle_sensors}
+        exec_result = self.negotiation.resolver.resolve(exec_raw, [], _cmd_override, exec_world_state)
+        final_assignments = self.negotiation._post_validate(exec_result.final_assignments)
+        conflicts = neg_result.conflicts_detected
 
-        # Detect conflicts on raw proposals (before _validate_proposals drops duplicates)
-        # so conflict log and rate reflect actual agent behaviour, not post-validation state
-        conflicts_raw = self.negotiation.detector.detect(proposals_raw, world_state)
-        if self.negotiation._history:
-            self.negotiation._history[-1].step_metrics["num_conflicts"] = len(conflicts_raw)
-        final_assignments = neg_result.final_assignments  # list[{sensor_id, target_id}]
-        conflicts = conflicts_raw  # use pre-validation conflicts for accurate reporting
-
-        # Build agent_id lookup from proposals
-        sensor_to_agent = {p.sensor_id: p.agent_id for p in proposals}
+        # Build agent_id lookup from exec proposals
+        sensor_to_agent = {p.sensor_id: p.agent_id for p in exec_proposals}
 
         handled_ids:     set = set()
         used_sensor_ids: set = set()

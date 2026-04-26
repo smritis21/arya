@@ -167,7 +167,7 @@ class ARYAXTrainer:
 
     def __init__(
         self,
-        model_name:   str   = "unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit",
+        model_name:   str   = "Qwen/Qwen2.5-0.5B-Instruct",
         num_episodes: int   = 3000,
         batch_size:   int   = 8,
         eval_every:   int   = 50,
@@ -341,7 +341,6 @@ class ARYAXTrainer:
                 targets_list_by_agent: dict[str, list] = {}
 
                 # First pass: satellite, drone, radar observe & propose
-                # Frozen agent (self-play curriculum) skips propose() entirely
                 for canonical_id in ["satellite", "drone", "radar"]:
                     agent = self._agents[canonical_id]
                     agent_obs = obs_map[canonical_id]
@@ -356,11 +355,19 @@ class ARYAXTrainer:
                         conflict_history=[],
                     )
                     agent.observe(model_obs)
-                    # freeze_agent uses short-code (SAT/UAV/RDR); map to canonical
                     _freeze_map = {"SAT": "satellite", "UAV": "drone", "RDR": "radar"}
                     frozen_canonical = _freeze_map.get(freeze_agent)
                     if frozen_canonical == canonical_id:
-                        proposals_obj = []  # frozen — contributes nothing this step
+                        proposals_obj = []
+                    elif self._model is not None:
+                        # Use LLM for proposals so GRPO gradient flows through model
+                        used_s = {p.sensor_id for p in all_proposals_obj}
+                        prompt, raw, prop = self._llm_propose(canonical_id, agent_obs, used_s)
+                        proposals_obj = [prop] if prop else agent.propose()  # greedy fallback
+                        # Store LLM experience for GRPO
+                        short_id = {"satellite": "SAT", "drone": "UAV", "radar": "RDR"}.get(canonical_id)
+                        if short_id and prompt and raw:
+                            agent_experiences[short_id].append((prompt, raw, 0.0))  # reward filled later
                     else:
                         proposals_obj = agent.propose()
                     all_proposals_obj.extend(proposals_obj)
@@ -452,16 +459,18 @@ class ARYAXTrainer:
                 # Store GRPO experiences (keyed by short AGENT_IDS for backward compat)
                 for short_id in AGENT_IDS:
                     canonical_id = AGENT_ID_MAP[short_id]
-                    obs_text  = json.dumps({"sensors": sensors_list, "targets": targets_list})
                     prop = next(
-                        (p for p in final_proposals_dict if p["agent_id"] == canonical_id),
-                        None
+                        (p for p in final_proposals_dict if p["agent_id"] == canonical_id), None
                     )
                     if prop:
-                        prop_text = json.dumps(prop)
-                        agent_experiences[short_id].append(
-                            (obs_text, prop_text, step_rewards.get(canonical_id, 0.0))
-                        )
+                        actual_reward = step_rewards.get(canonical_id, 0.0)
+                        # If LLM already stored experience this step, update its reward
+                        if agent_experiences[short_id] and agent_experiences[short_id][-1][2] == 0.0:
+                            q, r, _ = agent_experiences[short_id][-1]
+                            agent_experiences[short_id][-1] = (q, r, actual_reward)
+                        elif self._model is None:  # greedy mode — store now
+                            obs_text = json.dumps({"sensors": sensors_list, "targets": targets_list})
+                            agent_experiences[short_id].append((obs_text, json.dumps(prop), actual_reward))
 
             # ── Phase 2: Look-ahead reward shaping ───────────────
             lookahead = self.reward_engine.compute_episode_lookahead(
@@ -594,8 +603,48 @@ class ARYAXTrainer:
         # Final evaluation
         return self.evaluate()
 
-    # ── GRPO update step (stub — full impl requires live model) ──────
-    def _grpo_update(self, agent_experiences: dict[str, list[tuple]]) -> None:
+    def _llm_propose(self, agent_id: str, agent_obs, used_sensors: set) -> tuple[str, str, object | None]:
+        """Generate a proposal using the LLM. Returns (prompt, raw_response, Proposal|None)."""
+        from env.multiagent import Proposal as EnvProposal
+        role_desc = {"satellite": "strategic surveillance", "drone": "kinetic tracking",
+                     "radar": "airspace monitoring", "command": "gap-filling override"}.get(agent_id, "sensor allocation")
+        preferred = {"satellite": "strategic", "drone": "kinetic", "radar": "airspace"}.get(agent_id)
+        my_sensors = [s for s in agent_obs.sensors
+                      if s["available"] and s["id"] not in used_sensors
+                      and (agent_id == "command" or s.get("type") == agent_id)]
+        active = [t for t in agent_obs.targets if t["active"]]
+        if not my_sensors or not active:
+            return "", "", None
+        sensors_str = "\n".join(f"  - id={s['id']} type={s['type']}" for s in my_sensors)
+        targets_str = "\n".join(f"  - id={t['id']} priority={t['priority']} type={t.get('type','?')}" for t in active)
+        valid_tids = [t['id'] for t in active]
+        example_sid = my_sensors[0]['id']
+        example_tid = next((t['id'] for t in active if t.get('type') == preferred), active[0]['id'])
+        prompt = (f"You are the {agent_id} agent specializing in {role_desc}.\n"
+                  f"Assign your sensor to ONE threat. Prefer type='{preferred}'.\n"
+                  f"Valid target_ids: {valid_tids}\n"
+                  f"Your sensor:\n{sensors_str}\nThreats:\n{targets_str}\n"
+                  f"Respond with ONE JSON entry: "
+                  f'[{{"sensor_id": "{example_sid}", "target_id": "{example_tid}"}}]')
+        try:
+            inputs = self._tokenizer(prompt, return_tensors="pt")
+            if hasattr(self._model, 'device'):
+                inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
+            outputs = self._model.generate(**inputs, max_new_tokens=48, temperature=0.7,
+                                           do_sample=True, pad_token_id=self._tokenizer.eos_token_id)
+            raw = self._tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True).strip()
+            start, end = raw.find("["), raw.rfind("]") + 1
+            if start == -1 or end == 0:
+                return prompt, raw, None
+            item = json.loads(raw[start:end])[0]
+            sid, tid = item.get("sensor_id"), item.get("target_id")
+            valid_sids = {s['id'] for s in my_sensors}
+            valid_tids_set = {t['id'] for t in active}
+            if sid in valid_sids and tid in valid_tids_set:
+                return prompt, raw, EnvProposal(agent_id=agent_id, sensor_id=sid, target_id=tid)
+        except Exception as e:
+            logger.debug("LLM propose failed for %s: %s", agent_id, e)
+        return prompt, "", None
         """
         Group G proposals per step, compute group relative advantage,
         format and pass to GRPOTrainer for policy gradient update.
@@ -702,7 +751,7 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=100, help="Number of training episodes")
     parser.add_argument("--batch",    type=int, default=4,   help="Batch size")
     parser.add_argument("--eval-every", type=int, default=25, help="Eval interval (episodes)")
-    parser.add_argument("--model",    type=str, default="unsloth/Meta-Llama-3-8B-Instruct-bnb-4bit")
+    parser.add_argument("--model",    type=str, default="Qwen/Qwen2.5-0.5B-Instruct")
     parser.add_argument("--wandb",    action="store_true", help="Enable W&B logging")
     args = parser.parse_args()
 

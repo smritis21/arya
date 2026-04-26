@@ -27,19 +27,14 @@ def add_observation_noise(targets: List[Target], sensor_type: str, rng: random.R
 
 def apply_mask(global_targets: List[Target], agent_type: str, sensors: List[Sensor]) -> List[Target]:
     """Filter targets based on agent type's observability constraints."""
-    if agent_type == "satellite":
-        # Sees all targets
+    if agent_type in ("satellite", "command"):
         return list(global_targets)
     elif agent_type == "drone":
-        # Only sees targets within 100km — approximated by step index parity (even step targets)
-        # In a real geo system this would use lat/lon; here we use ID-based heuristic
-        return [t for t in global_targets if _drone_in_range(t)]
+        # Drone sees kinetic + strategic targets; misses pure airspace
+        return [t for t in global_targets if t.type != "airspace"]
     elif agent_type == "radar":
-        # Sees airspace targets clearly: targets with odd sequential index
-        return [t for t in global_targets if _is_airspace_target(t)]
-    elif agent_type == "command":
-        # Sees all targets but only through agent reports — no direct ground truth
-        return list(global_targets)
+        # Radar sees airspace + kinetic targets; misses pure strategic
+        return [t for t in global_targets if t.type != "strategic"]
     return list(global_targets)
 
 
