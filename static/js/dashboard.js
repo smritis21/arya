@@ -779,7 +779,7 @@ window.addEventListener('load', () => {
   });
 
   setTool('move');
-  setMode('single');
+  setMode('multi');
   loadTask(20, 42, 'Easy', 'MONITORING');
 });
 
