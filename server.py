@@ -91,8 +91,8 @@ def init_local_models():
         _has_adapters = False
 
 # Initialize — try local adapter first, fall back to remote API
-print("\nInitializing Environment and Models...")
-print(f"[ENV] HF_TOKEN set: {bool(HF_TOKEN)}, MODEL_NAME: {MODEL_NAME}, API_BASE_URL: {API_BASE_URL}")
+import sys
+print(f"[ENV] HF_TOKEN set: {bool(HF_TOKEN)}, MODEL_NAME: {MODEL_NAME}", flush=True, file=sys.stderr)
 init_local_models()
 
 if not _has_adapters:
@@ -100,11 +100,11 @@ if not _has_adapters:
         try:
             from openai import OpenAI
             _llm_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-            print(f"[LLM] Connected to remote API: {MODEL_NAME}")
+            print(f"[LLM] Connected to remote API: {MODEL_NAME}", flush=True, file=sys.stderr)
         except Exception as e:
-            print(f"[LLM] Failed to init client: {e}. Using greedy fallback.")
+            print(f"[LLM] Failed to init client: {e}. Using greedy fallback.", flush=True, file=sys.stderr)
     else:
-        print("[LLM] No HF_TOKEN set — using greedy fallback.")
+        print("[LLM] No HF_TOKEN set — using greedy fallback.", flush=True, file=sys.stderr)
 
 
 # ── Single-agent helpers (unchanged) ─────────────────────────────────────────
