@@ -11,7 +11,7 @@ COPY . .
 
 EXPOSE 7860
 
-ENV API_BASE_URL="https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta/v1" \
+ENV API_BASE_URL="https://api-inference.huggingface.co/v1" \
     MODEL_NAME="HuggingFaceH4/zephyr-7b-beta"
 
 # cache bust: 2026-04-26
